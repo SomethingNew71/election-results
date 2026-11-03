@@ -19,11 +19,16 @@ interface DurableNamespace {
 }
 
 interface CloudflareContext {
-  env?: { $DurableObject?: DurableNamespace }
+  env?: { $DurableObject?: DurableNamespace; CF_VERSION_METADATA?: { id: string } }
   durable?: DurableLike
 }
 
-/** Binding and instance names used by nitro's cloudflare_durable preset. */
+/**
+ * Object name. It carries the Worker version: a busy object (requests plus the
+ * 15 s alarm) kept serving the old code after a deploy, so each version gets
+ * its own object. The old one stops once its alarm sees no requests for
+ * WARM_FOR_MS.
+ */
 const INSTANCE = 'server'
 
 const ALARM_MS = 15_000
@@ -58,7 +63,8 @@ export async function viaSnapshot(event: H3Event): Promise<Response | null> {
   if (!ns) return null
   try {
     const url = getRequestURL(event)
-    const forward = ns.get(ns.idFromName(INSTANCE)).fetch(new Request(url, { headers: { accept: 'application/json' } }))
+    const name = `${INSTANCE}-${env?.CF_VERSION_METADATA?.id ?? 'local'}`
+    const forward = ns.get(ns.idFromName(name)).fetch(new Request(url, { headers: { accept: 'application/json' } }))
     const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), FORWARD_TIMEOUT_MS))
     const res = await Promise.race([forward, timeout])
     if (!res) console.warn(`Snapshot object slower than ${FORWARD_TIMEOUT_MS} ms; answering from this isolate`)
