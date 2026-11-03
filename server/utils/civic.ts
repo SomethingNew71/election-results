@@ -165,7 +165,8 @@ export function toCandidate(c: CivicCandidate): Candidate {
 export function kindOf(type: string): RaceKind | null {
   if (type === 'US Senate') return 'senate'
   if (type === 'Governor') return 'governor'
-  if (type === 'House of Representatives') return 'house'
+  // DC and the territories elect non-voting delegates; they list with the House but never count toward its 435 seats.
+  if (type === 'House of Representatives' || type === 'Delegate') return 'house'
   return null
 }
 
@@ -178,6 +179,7 @@ export function toSummary(r: CivicRace, kind: RaceKind): RaceSummary {
     district: r.district,
     pct: r.percent_reporting ?? 0,
     candidates: r.candidates.map(toCandidate),
+    ...(r.type === 'Delegate' ? { delegate: true } : {}),
   }
 }
 
