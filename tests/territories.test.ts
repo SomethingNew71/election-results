@@ -32,8 +32,11 @@ describe('territories', () => {
     expect(stateName('DC')).toBe('District of Columbia')
   })
 
-  it('treats territory races as majority races, and DC as plurality', () => {
-    for (const t of ['GU', 'VI', 'AS', 'MP']) expect(rulesFor(t, 'governor').majority).toBe(true)
+  it('applies territory runoff rules per office', () => {
+    for (const t of ['GU', 'VI', 'MP']) expect(rulesFor(t, 'governor').majority).toBe(true)
+    for (const t of ['GU', 'VI', 'AS']) expect(rulesFor(t, 'house').majority).toBe(true)
+    expect(rulesFor('MP', 'house').majority).toBe(false)
     expect(rulesFor('DC', 'house').majority).toBe(false)
+    expect(rulesFor('TX', 'house').majority).toBe(false)
   })
 })

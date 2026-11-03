@@ -70,7 +70,7 @@ export const STATUS_HELP: Record<InferenceStatus, string> = {
   early: `Fewer than ${EARLY_PCT}% of the expected vote is reported.`,
   competitive: 'The trailing candidate needs under 55% of the remaining vote to overtake.',
   close: 'The margin is under 0.5% of the vote. Provisional, cured and overseas ballots can still change it.',
-  runoff: 'This state requires 50% to win outright. The leader is below 50%.',
+  runoff: 'This race requires 50% to win outright. The leader is below 50%.',
   rcv: 'No candidate has 50% of first choices. Ranked-choice rounds will decide the race.',
   lean: 'The trailing candidate needs 55–65% of the remaining vote to overtake.',
   strong: 'The trailing candidate needs more than 65% of the remaining vote to overtake.',

@@ -7,17 +7,22 @@ export interface ElectionRules {
   rcv: boolean
 }
 
+const MAJORITY_STATES = new Set(['GA', 'LA'])
 /**
- * Guam, the U.S. Virgin Islands, American Samoa and the Northern Mariana
- * Islands hold a runoff when no candidate for governor or delegate gets a
- * majority. Treating all four as majority races only stops an early
- * "Out of reach" below 50%. No runoff dates are listed for them.
+ * Territory races that go to a runoff without a majority. Governors: Guam,
+ * U.S. Virgin Islands, Northern Mariana Islands. Delegates (kind 'house'):
+ * Guam and the U.S. Virgin Islands (48 U.S.C. 1712) and American Samoa. The
+ * Northern Mariana Islands delegate and the DC delegate are plurality races.
+ * No runoff dates are listed for territories.
  */
-const MAJORITY_STATES = new Set(['GA', 'LA', 'GU', 'VI', 'AS', 'MP'])
+const MAJORITY_TERRITORIES: Partial<Record<RaceKind, Set<string>>> = {
+  governor: new Set(['GU', 'VI', 'MP']),
+  house: new Set(['GU', 'VI', 'AS']),
+}
 
 export function rulesFor(state: string, kind: RaceKind): ElectionRules {
   return {
-    majority: MAJORITY_STATES.has(state),
+    majority: MAJORITY_STATES.has(state) || Boolean(MAJORITY_TERRITORIES[kind]?.has(state)),
     // Alaska uses RCV for all general elections; Maine for federal ones.
     rcv: state === 'AK' || (state === 'ME' && kind !== 'governor'),
   }

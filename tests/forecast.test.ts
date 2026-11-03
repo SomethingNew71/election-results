@@ -102,4 +102,10 @@ describe('parseForecast', () => {
     const fine = parseForecast('house', 218, { monte_carlo: { prob_democrat_majority: 96, prob_republican_majority: 3.5, democrat_seats_p50: 240, republican_seats_p50: 195 } }, ids)
     expect(fine.simulationIssues).toEqual([])
   })
+
+  it('leaves territory races out of the seat totals', () => {
+    const c = parseForecast('governor', 26, { states: { GU: { rating: 'Safe D' }, IA: { rating: 'Lean R' } } }, ids, { Democratic: 6, Republican: 8 })
+    expect(c.totals).toMatchObject({ dem: 6, rep: 9 })
+    expect(c.races).toHaveLength(2)
+  })
 })

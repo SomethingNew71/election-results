@@ -1,5 +1,9 @@
 import type { ForecastChamber, RaceKind } from '#shared/types'
 import { CHAMBER_SEATS, ratingStyle } from '../../shared/utils/forecast'
+import { STATE_BY_POSTAL } from '../../shared/utils/states'
+
+/** Rating strings already warned about, so a new spelling is logged once per object lifetime. */
+const warned = new Set<string>()
 
 /** civicAPI's forecast payload. Every field may be missing; parseForecast defaults each one. */
 export interface CivicForecast {
@@ -59,7 +63,7 @@ function simulationIssues(kind: RaceKind, mc: CivicForecast['monte_carlo'], bins
   }
   const md = num(mc?.democrat_seats_p50)
   const mr = num(mc?.republican_seats_p50)
-  if (md !== null && mr !== null && md + mr > seats) out.push(`Its median ${unit} add up to ${md + mr}; there are ${seats}.`)
+  if (md !== null && mr !== null && md + mr > seats + 0.5) out.push(`Its median ${unit} add up to ${md + mr}; there are ${seats}.`)
   const ed = num(mc?.expected_democrat_seats)
   const er = num(mc?.expected_republican_seats)
   if (ed !== null && er !== null && ed + er > seats + 0.5) out.push(`Its expected ${unit} add up to ${fmt(ed + er)}; there are ${seats}.`)
@@ -88,14 +92,22 @@ export function parseForecast(
   const n = d.national
   const notUp = { dem: holdovers.Democratic ?? 0, rep: holdovers.Republican ?? 0, ind: holdovers.Independent ?? 0 }
   const totals = { ...notUp, tossup: 0, unrated: 0, notUp }
-  for (const r of Object.values(d.states ?? {})) {
+  for (const [key, r] of Object.entries(d.states ?? {})) {
+    // A territory race would push the totals past the chamber size; it still lists in the race table.
+    if (!STATE_BY_POSTAL.has(key.slice(0, 2))) continue
     const rating = r?.rating || 'Unrated'
     const party = ratingStyle(rating).party
     if (party === 'Democratic') totals.dem++
     else if (party === 'Republican') totals.rep++
     else if (party === 'Independent') totals.ind++
     else if (/^toss/i.test(rating)) totals.tossup++
-    else totals.unrated++
+    else {
+      totals.unrated++
+      if (rating !== 'Unrated' && !warned.has(rating)) {
+        warned.add(rating)
+        console.warn(`civicAPI forecast: unknown rating "${rating}" counted as unrated`)
+      }
+    }
   }
   const published = t ? { dem: t.democrat ?? 0, rep: t.republican ?? 0, tossup: t.tossup ?? 0, ind: t.independent ?? 0 } : null
   const sameAsPublished =
