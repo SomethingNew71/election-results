@@ -8,7 +8,8 @@ export default defineNuxtConfig({
     plugins: [tailwindcss()],
   },
   nitro: {
-    preset: 'cloudflare_module',
+    // Runs the app inside a Durable Object as well; see server/utils/snapshot.ts.
+    preset: 'cloudflare_durable',
     cloudflare: {
       deployConfig: false,
       nodeCompat: true,

@@ -9,5 +9,9 @@
     "directory": ".output/public",
     "binding": "ASSETS"
   },
+  "durable_objects": {
+    "bindings": [{ "name": "$DurableObject", "class_name": "$DurableObject" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["$DurableObject"] }],
   "observability": { "enabled": true }
 }
