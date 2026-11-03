@@ -87,7 +87,7 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
     <template v-else-if="data && inf">
       <header class="mt-3 flex flex-wrap items-end justify-between gap-4 border-b border-rule pb-4">
         <div>
-          <div class="kicker">{{ kindLabel }} · {{ stateName(data.state) }}</div>
+          <div class="kicker">{{ data.delegate ? 'US House delegate (non-voting)' : kindLabel }} · {{ stateName(data.state) }}</div>
           <h1 class="font-display mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">{{ data.name }}</h1>
         </div>
         <div class="flex items-center gap-2 text-xs">
