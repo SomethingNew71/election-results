@@ -32,8 +32,17 @@ export default defineEventHandler(async (event): Promise<RaceDetail | Response> 
   const feed = merged ? feeds.get(feedKey(merged))?.race : undefined
   const civicRegions = toRegions(d)
   // State feeds name counties without FIPS; borrow civicAPI's by name for the 2024 baseline.
+  // Some feeds give names only (Clarity), others FIPS only (Tally); fill in the other from civicAPI.
   const fipsByName = new Map(civicRegions.filter((r) => r.fips).map((r) => [countyKey(r.name), r.fips]))
-  const stateRegions = merged && feed ? feedRegions(merged, feed)?.map((r) => ({ ...r, fips: fipsByName.get(countyKey(r.name)) ?? null })) : null
+  const nameByFips = new Map(civicRegions.filter((r) => r.fips).map((r) => [r.fips, r.name]))
+  const stateRegions =
+    merged && feed
+      ? feedRegions(merged, feed)?.map((r) => ({
+          ...r,
+          fips: r.fips ?? fipsByName.get(countyKey(r.name)) ?? null,
+          name: r.fips ? (nameByFips.get(r.fips) ?? r.name) : r.name,
+        }))
+      : null
 
   setResponseHeader(event, 'cache-control', 'public, max-age=15')
   return {

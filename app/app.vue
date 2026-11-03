@@ -15,11 +15,15 @@
     <footer class="text-muted mt-12 border-t border-rule pt-6 text-xs leading-relaxed">
       <p>
         Results data from <a href="https://civicapi.org" class="underline underline-offset-2 hover:text-ink">civicAPI</a>, cross-checked
-        against the official Colorado and Iowa Secretary of State feeds (Clarity ENR) where available. Colours
+        against official state results feeds where available (Arkansas, Colorado, Delaware, Iowa, Missouri, Ohio, Virginia). Colours
         are fixed per party. "Called" means civicAPI has marked a winner; every other status is an estimate computed in your
         browser from the reported count.
       </p>
-      <p class="mt-2">Map geometry: US Census Bureau via us-atlas. Page refreshes every 30 seconds while open.</p>
+      <p class="mt-2">
+        Map geometry: US Census Bureau via us-atlas. 2024 county results:
+        <a href="https://github.com/tonmcg/US_County_Level_Election_Results_08-24" class="underline underline-offset-2 hover:text-ink">tonmcg</a>
+        (MIT). Page refreshes every 30 seconds while open.
+      </p>
     </footer>
   </div>
 </template>

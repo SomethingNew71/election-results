@@ -87,6 +87,7 @@ export function mergeFeed(
     civicTotal,
     unitsReporting: feed.unitsReporting,
     unitsTotal: feed.unitsTotal,
+    unitLabel: feed.unitLabel,
     matched,
     used: useFeed,
     differences,
@@ -128,9 +129,9 @@ export function feedRegions(race: RaceSummary, feed: FeedRace): RegionResult[] |
   return feed.regions.map((r) => {
     let writeInGiven = false
     return {
-      key: `state:${r.name}`,
+      key: `state:${r.fips ?? r.name}`,
       name: r.name,
-      fips: null,
+      fips: r.fips ?? null,
       pct: r.precinctsTotal > 0 ? (100 * r.precinctsReporting) / r.precinctsTotal : 0,
       candidates: race.candidates.map((c) => {
         if (isWriteIn(c.name)) {

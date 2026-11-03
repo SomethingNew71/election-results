@@ -13,7 +13,7 @@ const rows = computed(() => [...props.check.differences].sort((a, b) => Math.max
     <h2 class="font-display text-lg font-semibold tracking-tight">Official state count</h2>
     <p class="text-muted mt-1 text-xs">
       <a :href="check.sourceUrl" class="underline underline-offset-2 hover:text-ink" target="_blank" rel="noopener">{{ check.source }}</a>
-      · {{ check.unitsReporting }} of {{ check.unitsTotal }} counties reporting<template v-if="check.version"> · version {{ check.version }}</template>
+      <template v-if="check.unitsTotal"> · {{ formatNumber(check.unitsReporting) }} of {{ formatNumber(check.unitsTotal) }} {{ check.unitLabel }} reporting</template><template v-if="check.version"> · version {{ check.version }}</template>
     </p>
     <p class="text-muted num mt-1 text-xs">
       State feed checked {{ formatAge(ageOf(check.checkedAt, now)) }} · this version downloaded {{ formatAge(ageOf(check.fetchedAt, now)) }}

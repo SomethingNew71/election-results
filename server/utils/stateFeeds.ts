@@ -1,9 +1,14 @@
 import type { FeedRace, FeedRegion, RaceKind, RaceSummary } from '#shared/types'
+import type { FeedAdapter } from '../feeds/http'
+import { delaware } from '../feeds/delaware'
+import { ohio } from '../feeds/ohio'
+import { arkansas, missouri } from '../feeds/tally'
+import { virginia } from '../feeds/virginia'
 
 /**
- * Official state results published on Clarity ENR (Scytl) for the 2026
- * general. Checked 2026-11-03: only Colorado and Iowa publish statewide
- * 2026 general results there. Clarity's CloudFront blocks curl's default
+ * Official state results. Clarity ENR (Scytl) is read here; other vendors'
+ * adapters are in server/feeds/. Checked 2026-11-03: only Colorado and Iowa
+ * publish statewide 2026 general results on Clarity. Clarity's CloudFront blocks curl's default
  * User-Agent; our descriptive one (set in cachedGet) is accepted.
  */
 const CLARITY_FEEDS = [
@@ -56,6 +61,7 @@ export function parseClarity(state: string, contests: ClarityContest[], details:
       candidates: c.CH.map((name, i) => ({ name, votes: Number(c.V[i]) || 0 })),
       unitsReporting: c.PR ?? 0,
       unitsTotal: c.TP ?? 0,
+      unitLabel: 'counties',
       regions: d ? parseRegions(d, c.CH.length) : undefined,
     })
   }
@@ -87,66 +93,83 @@ export function feedKey(r: { state: string; kind: RaceKind; district: string | n
 }
 
 export type FeedMap = Map<string, { race: FeedRace; meta: FeedMeta }>
-type Feed = (typeof CLARITY_FEEDS)[number]
+function clarityAdapter(f: (typeof CLARITY_FEEDS)[number]): FeedAdapter {
+  const base = `${CLARITY}/${f.state}/${f.eid}`
+  return {
+    state: f.state,
+    source: f.source,
+    sourceUrl: `${base}/`,
+    async load(prev) {
+      const ver = await cachedGet<string>(`${base}/current_ver.txt`, f.source, async (res) => (await res.text()).trim())
+      if (!/^\d+$/.test(ver.data)) throw new Error(`${f.source}: unexpected version "${ver.data.slice(0, 40)}"`)
+      const version = Number(ver.data)
+      if (prev !== null && version <= prev) return { version }
+      const get = (path: string) =>
+        fetch(`${base}/${version}/${path}`, {
+          headers: { accept: 'application/json', 'user-agent': USER_AGENT },
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        })
+      const [res, detailRes] = await Promise.all([get('json/en/summary.json'), get('json/details.json').catch(() => null)])
+      if (!res.ok) throw new Error(`${f.source}: summary ${res.status}`)
+      // County detail is optional: without it the race still cross-checks.
+      let details: ClarityDetail[] = []
+      if (detailRes?.ok) {
+        try {
+          details = ((await detailRes.json()) as { Contests?: ClarityDetail[] }).Contests ?? []
+        } catch (err) {
+          console.warn(`${f.source}: county detail unreadable`, err)
+        }
+      }
+      return { version, races: parseClarity(f.state, (await res.json()) as ClarityContest[], details) }
+    },
+  }
+}
+
+/**
+ * Every official feed, one per state. Adding a state: write an adapter in
+ * server/feeds/, add a parser test, and list it here.
+ */
+const ADAPTERS: FeedAdapter[] = [...CLARITY_FEEDS.map(clarityAdapter), ohio, arkansas, missouri, virginia, delaware]
 
 /** A request waits at most this long for state feeds, then uses the last good copy. */
 const BUDGET_MS = 1_500
 /** After a failure, a state's feed is not retried for this long. */
 const FAILURE_BACKOFF_MS = 60_000
+/** Feeds are not asked more often than this. */
+const MIN_INTERVAL_MS = 20_000
 const TIMEOUT_MS = 8_000
 
 /**
  * Latest parsed feed per state. Only the small parsed races are kept, and a
- * version lower than one already applied is ignored, so counts never move
- * backwards between polls.
+ * version not higher than one already applied is ignored, so counts never
+ * move backwards between polls. Feeds without a version stamp use total votes.
  */
 const latest = new Map<string, { version: number; races: FeedRace[]; meta: FeedMeta }>()
 const failedAt = new Map<string, number>()
+const attemptedAt = new Map<string, number>()
 const refreshing = new Map<string, Promise<void>>()
 
-function refreshFeed(f: Feed): Promise<void> {
-  if (Date.now() - (failedAt.get(f.state) ?? 0) < FAILURE_BACKOFF_MS) return Promise.resolve()
+function refreshFeed(f: FeedAdapter): Promise<void> {
+  const now = Date.now()
+  if (now - (failedAt.get(f.state) ?? 0) < FAILURE_BACKOFF_MS) return Promise.resolve()
   const pending = refreshing.get(f.state)
   if (pending) return pending
+  if (latest.has(f.state) && now - (attemptedAt.get(f.state) ?? 0) < MIN_INTERVAL_MS) return Promise.resolve()
+  attemptedAt.set(f.state, now)
 
-  const base = `${CLARITY}/${f.state}/${f.eid}`
   const run = (async () => {
-    const ver = await cachedGet<string>(`${base}/current_ver.txt`, f.source, async (res) => (await res.text()).trim())
-    if (!/^\d+$/.test(ver.data)) throw new Error(`${f.source}: unexpected version "${ver.data.slice(0, 40)}"`)
-    const version = Number(ver.data)
     const prev = latest.get(f.state)
-    if (prev && version <= prev.version) {
-      prev.meta.checkedAt = new Date(ver.fetchedAt).toISOString()
+    const loaded = await f.load(prev?.version ?? null)
+    const checkedAt = new Date().toISOString()
+    if (prev && (!loaded.races || loaded.version <= prev.version)) {
+      prev.meta.checkedAt = checkedAt
       return
     }
-
-    const get = (path: string) =>
-      fetch(`${base}/${version}/${path}`, {
-        headers: { accept: 'application/json', 'user-agent': USER_AGENT },
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      })
-    const [res, detailRes] = await Promise.all([get('json/en/summary.json'), get('json/details.json').catch(() => null)])
-    if (!res.ok) throw new Error(`${f.source}: summary ${res.status}`)
-    // County detail is optional: without it the race still cross-checks.
-    let details: ClarityDetail[] = []
-    if (detailRes?.ok) {
-      try {
-        details = ((await detailRes.json()) as { Contests?: ClarityDetail[] }).Contests ?? []
-      } catch (err) {
-        console.warn(`${f.source}: county detail unreadable`, err)
-      }
-    }
-    const races = parseClarity(f.state, (await res.json()) as ClarityContest[], details)
+    if (!loaded.races) return
     latest.set(f.state, {
-      version,
-      races,
-      meta: {
-        source: f.source,
-        sourceUrl: `${base}/`,
-        fetchedAt: new Date().toISOString(),
-        checkedAt: new Date(ver.fetchedAt).toISOString(),
-        version: String(version),
-      },
+      version: loaded.version,
+      races: loaded.races,
+      meta: { source: f.source, sourceUrl: f.sourceUrl, fetchedAt: checkedAt, checkedAt, version: String(loaded.version) },
     })
   })()
     .catch((err) => {
@@ -165,8 +188,9 @@ function refreshFeed(f: Feed): Promise<void> {
  * holds up the page.
  */
 export async function stateFeedRaces(waitUntil?: (p: Promise<unknown>) => void): Promise<FeedMap> {
-  const refresh = Promise.allSettled(CLARITY_FEEDS.map(refreshFeed))
-  if (waitUntil && CLARITY_FEEDS.every((f) => latest.has(f.state))) waitUntil(refresh)
+  const refresh = Promise.allSettled(ADAPTERS.map(refreshFeed))
+  // A state that has never loaded (failing or blocked) must not make every request wait.
+  if (waitUntil && ADAPTERS.every((f) => latest.has(f.state) || failedAt.has(f.state))) waitUntil(refresh)
   else await Promise.race([refresh, new Promise((resolve) => setTimeout(resolve, BUDGET_MS))])
   const out: FeedMap = new Map()
   for (const { races, meta } of latest.values()) {
