@@ -48,7 +48,7 @@ export function useRaceChanges(items: Ref<{ race: RaceSummary; inf: { status: In
         const prev = seen.get(race.id)
         seen.set(race.id, current)
         if (!prev) continue
-        const label = race.district ?? `${stateName(race.state)} ${race.kind === 'governor' ? 'Governor' : race.kind === 'senate' ? 'Senate' : ''}`.trim()
+        const label = race.delegate ? race.name : race.district ?? `${stateName(race.state)} ${race.kind === 'governor' ? 'Governor' : race.kind === 'senate' ? 'Senate' : ''}`.trim()
         const push = (text: string) => fresh.push({ id: nextId++, raceId: race.id, label, text, at: now, color: inf.leader?.color ?? null })
         if (current.winner && current.winner !== prev.winner) push(`civicAPI marked ${current.winner} as the winner`)
         else if (current.leader && prev.leader && current.leader !== prev.leader) push(`${current.leader} moved ahead of ${prev.leader}`)
