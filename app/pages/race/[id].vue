@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { RaceDetail, RegionResult } from '#shared/types'
 import { POLL_CLOSINGS } from '#shared/utils/pollClosings'
+import { runoffDate } from '#shared/utils/rules'
+import { certificationOf } from '#shared/utils/certification'
 import { formatShift, shiftVs2024, turnoutEstimate, type Baseline } from '#shared/utils/baseline'
 
 const route = useRoute()
 const id = computed(() => String(route.params.id))
-const { data, error, dataAge, isOld } = useLive<RaceDetail>(() => `/api/race/${id.value}`, () => `race-${id.value}`)
+const { data, error, dataAge, isOld, archived } = useLive<RaceDetail>(() => `/api/race/${id.value}`, () => `race-${id.value}`)
 
 const inf = computed(() =>
   data.value && !data.value.testData
@@ -49,6 +51,11 @@ const pollsClose = computed(() => {
   return t.first === t.last ? `${fmt(t.first)} ET` : `${fmt(t.first)}–${fmt(t.last)} ET`
 })
 
+const formatDay = (iso: string) =>
+  new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+const runoff = computed(() => (data.value ? runoffDate(data.value.state, data.value.kind) : null))
+const certified = computed(() => (data.value ? certificationOf(data.value.state) : null))
+
 const kindLabel = computed(() => ({ senate: 'US Senate', governor: 'Governor', house: 'US House' })[data.value?.kind ?? 'senate'])
 const backView = computed(() => (data.value?.kind === 'senate' ? undefined : data.value?.kind))
 
@@ -81,13 +88,24 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
           <h1 class="font-display mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">{{ data.name }}</h1>
         </div>
         <div class="flex items-center gap-2 text-xs">
-          <span v-if="!isOld" class="live-dot" />
-          <span class="num" :class="isOld ? 'font-semibold text-ink' : 'text-muted'">Data from {{ formatAge(dataAge) }}</span>
+          <span v-if="!isOld && !archived" class="live-dot" />
+          <span v-if="archived" class="num text-muted">Final snapshot · {{ formatSnapshot(data.dataAsOf) }}</span>
+          <span v-else class="num" :class="isOld ? 'font-semibold text-ink' : 'text-muted'">Data from {{ formatAge(dataAge) }}</span>
         </div>
       </header>
 
       <div v-if="data.stale" role="status" class="mt-4 rounded border border-ink bg-panel px-4 py-3 text-sm">
         civicAPI is not responding. These results are from {{ formatAge(dataAge) }} and may be out of date.
+      </div>
+      <div v-if="certified" role="status" class="mt-4 rounded border border-rule bg-panel px-4 py-3 text-sm">
+        {{ stateName(data.state) }} certified its results on {{ formatDay(certified.date) }}.
+        <a :href="certified.source" class="underline underline-offset-2" target="_blank" rel="noopener">Official source</a>
+      </div>
+      <div v-else-if="inf?.status === 'called'" class="text-muted mt-4 text-xs">
+        Results are unofficial until {{ stateName(data.state) }} certifies them.
+      </div>
+      <div v-if="runoff && inf?.status === 'runoff'" role="status" class="mt-4 rounded border border-ink bg-panel px-4 py-3 text-sm">
+        No candidate has 50% yet. If that holds, the top two meet in a runoff on {{ formatDay(runoff) }}.
       </div>
       <div v-if="data.disputed" role="status" class="mt-4 rounded border border-ink bg-panel px-4 py-3 text-sm">
         civicAPI marks this result as disputed.

@@ -26,7 +26,7 @@ function setQuery(patch: Record<string, string | null>) {
   router.replace({ query })
 }
 
-const { data, error, dataAge, isOld, status } = useLive<Overview>('/api/overview', 'overview')
+const { data, error, dataAge, isOld, status, archived } = useLive<Overview>('/api/overview', 'overview')
 const showHolders = useShowOfficeholders()
 const holderTable = computed(() =>
   kind.value === 'senate' ? SENATE_NOT_UP : kind.value === 'governor' ? GOVERNOR_NOT_UP : null,
@@ -167,11 +167,12 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
         {{ k.label }}
       </button>
       <div class="ml-auto flex items-center gap-2 self-center text-xs">
-        <span v-if="!isOld" class="live-dot" />
+        <span v-if="!isOld && !archived" class="live-dot" />
         <span class="num" :class="isOld ? 'font-semibold text-ink' : 'text-muted'">
-          <template v-if="status === 'pending' && !data">Loading…</template>
+          <template v-if="archived">Final snapshot · {{ formatSnapshot(data?.dataAsOf) }}</template>
+          <template v-else-if="status === 'pending' && !data">Loading…</template>
           <template v-else>Data from {{ formatAge(dataAge) }}</template>
-          <template v-if="feedAge !== null"> · state feeds checked {{ formatAge(feedAge) }}</template>
+          <template v-if="feedAge !== null && !archived"> · state feeds checked {{ formatAge(feedAge) }}</template>
         </span>
       </div>
     </nav>
@@ -186,7 +187,7 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
     </div>
 
     <template v-else>
-      <ClientOnly><NextClosings class="mt-4" /></ClientOnly>
+      <ClientOnly v-if="!archived"><NextClosings class="mt-4" /></ClientOnly>
 
       <section v-if="chamber" class="mt-6 rounded-lg border border-rule bg-panel p-5">
         <BalanceBar :chamber="chamber" :races="races" />
@@ -279,7 +280,7 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
             </dl>
           </template>
         </aside>
-        <RecentChanges :events="events" />
+        <RecentChanges v-if="!archived" :events="events" />
         </div>
       </section>
 

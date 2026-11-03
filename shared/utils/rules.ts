@@ -16,3 +16,19 @@ export function rulesFor(state: string, kind: RaceKind): ElectionRules {
     rcv: state === 'AK' || (state === 'ME' && kind !== 'governor'),
   }
 }
+
+/**
+ * Runoff dates when no candidate reaches 50%. Georgia: all offices, 1 Dec 2026
+ * (georgia.gov). Louisiana: the 3 Nov House races are an open primary after
+ * the 2026 redistricting, with a runoff on 12 Dec 2026 (The Green Papers;
+ * confirm with sos.la.gov). Louisiana's Senate race has two candidates.
+ */
+export const RUNOFF_DATES: Record<string, { date: string; kinds: RaceKind[] }> = {
+  GA: { date: '2026-12-01', kinds: ['senate', 'governor', 'house'] },
+  LA: { date: '2026-12-12', kinds: ['house'] },
+}
+
+export function runoffDate(state: string, kind: RaceKind): string | null {
+  const r = RUNOFF_DATES[state]
+  return r && r.kinds.includes(kind) ? r.date : null
+}
