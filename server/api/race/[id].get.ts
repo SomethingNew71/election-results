@@ -1,11 +1,13 @@
 import type { RaceDetail } from '#shared/types'
 import type { CivicRaceDetail } from '../../utils/civic'
 
-export default defineEventHandler(async (event): Promise<RaceDetail> => {
+export default defineEventHandler(async (event): Promise<RaceDetail | Response> => {
   const id = Number(getRouterParam(event, 'id'))
   if (!Number.isInteger(id) || id <= 0) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid race id' })
   }
+  const forwarded = await viaSnapshot(event)
+  if (forwarded) return forwarded
 
   // Only proxy races on today's ballot, so arbitrary ids cannot fill the cache.
   // In dev, past races (for example 5861, the finished 2025 VA governor race) are allowed for testing.
