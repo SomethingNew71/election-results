@@ -158,6 +158,7 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
 
         <aside class="space-y-6">
           <CrossCheckPanel v-if="data.crossCheck" :check="data.crossCheck" />
+          <VoteTypesPanel v-if="data.voteTypes" :split="data.voteTypes" />
           <section class="rounded-lg border border-rule bg-panel p-5">
             <h2 class="font-display text-lg font-semibold tracking-tight">What the count says</h2>
             <p v-if="inf.status === 'no-votes'" class="text-muted mt-2 text-sm">No votes are reported yet.</p>

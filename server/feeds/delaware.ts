@@ -5,6 +5,7 @@ import { getJson, countsFingerprint, type FeedAdapter } from './http'
  * Delaware Department of Elections results on the state open-data portal
  * (Socrata dataset yg7x-kgjc): one row per candidate, statewide only, with
  * no reporting-unit counts. A fingerprint of the counts stands in for a version.
+ * Each row also splits the count into machine, early and absentee votes.
  */
 const URL = 'https://data.delaware.gov/resource/yg7x-kgjc.json?election_name=2026%20General%20Election&$limit=1000'
 
@@ -12,7 +13,19 @@ export interface DelawareRow {
   office: string
   candidate_name: string
   total_votes: string
+  machine_votes?: string
+  early_votes?: string
+  absentee_votes?: string
 }
+
+/** The state's own column names, in its order. */
+const VOTE_TYPES = [
+  ['machine_votes', 'Machine'],
+  ['early_votes', 'Early'],
+  ['absentee_votes', 'Absentee'],
+] as const
+
+const count = (s: string | undefined) => Number(String(s ?? '').replace(/,/g, '')) || 0
 
 export function delawareKind(office: string): { kind: RaceKind; district: string | null } | null {
   if (/^U\.S\. Senator$/i.test(office)) return { kind: 'senate', district: null }
@@ -28,10 +41,22 @@ export function parseDelaware(rows: DelawareRow[]): FeedRace[] {
     if (!kind) continue
     const key = `${kind.kind}|${kind.district}`
     if (!byOffice.has(key)) {
-      byOffice.set(key, { state: 'DE', ...kind, candidates: [], unitsReporting: 0, unitsTotal: 0, unitLabel: '' })
+      byOffice.set(key, {
+        state: 'DE',
+        ...kind,
+        candidates: [],
+        unitsReporting: 0,
+        unitsTotal: 0,
+        unitLabel: '',
+        byType: { types: VOTE_TYPES.map(([, label]) => label), votes: [] },
+      })
     }
-    byOffice.get(key)!.candidates.push({ name: row.candidate_name, votes: Number(String(row.total_votes).replace(/,/g, '')) || 0 })
+    const race = byOffice.get(key)!
+    race.candidates.push({ name: row.candidate_name, votes: count(row.total_votes) })
+    race.byType!.votes.push(VOTE_TYPES.map(([field]) => count(row[field])))
   }
+  // A dataset without the split columns gives no split, not a row of zeros.
+  if (!rows.some((r) => VOTE_TYPES.some(([field]) => field in r))) for (const race of byOffice.values()) delete race.byType
   return [...byOffice.values()]
 }
 

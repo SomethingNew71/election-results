@@ -49,4 +49,32 @@ export interface FeedAdapter {
   /** Public page a reader can check. */
   sourceUrl: string
   load(prevVersion: number | null): Promise<FeedLoad>
+  /** Votes by type for one race, from a per-contest request (`race.ref`). Null when the feed has no split. */
+  voteTypes?(race: import('#shared/types').FeedRace): Promise<import('#shared/types').VoteTypeCounts | null>
+}
+
+/**
+ * Lines up per-candidate vote-type rows with a race's candidates by name.
+ * Write-ins are summed into "Write-in". Null when a named candidate is missing,
+ * so a changed feed shows no split rather than a wrong one.
+ */
+export function alignByName(
+  candidates: { name: string }[],
+  rows: { name: string; writeIn: boolean; votes: number[] }[],
+  types: number,
+): number[][] | null {
+  const byName = new Map<string, number[]>()
+  for (const r of rows) {
+    const key = r.writeIn ? 'Write-in' : r.name
+    const sum = byName.get(key) ?? new Array<number>(types).fill(0)
+    r.votes.forEach((v, i) => (sum[i]! += Number(v) || 0))
+    byName.set(key, sum)
+  }
+  const out: number[][] = []
+  for (const c of candidates) {
+    const v = byName.get(c.name)
+    if (!v) return null
+    out.push(v)
+  }
+  return out
 }

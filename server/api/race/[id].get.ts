@@ -44,6 +44,8 @@ export default defineEventHandler(async (event): Promise<RaceDetail | Response> 
         }))
       : null
 
+  const voteTypes = merged ? await voteTypeBreakdown(merged, feeds, waitUntil) : null
+
   setResponseHeader(event, 'cache-control', 'public, max-age=15')
   return {
     ...merged!,
@@ -57,6 +59,7 @@ export default defineEventHandler(async (event): Promise<RaceDetail | Response> 
     regions: stateRegions ?? civicRegions,
     regionSource: stateRegions ? 'state' : 'civicapi',
     projectionRegions: stateRegions ? civicRegions : null,
+    voteTypes,
   }
 })
 

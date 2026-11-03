@@ -131,6 +131,10 @@ function clarityAdapter(f: (typeof CLARITY_FEEDS)[number]): FeedAdapter {
  */
 const ADAPTERS: FeedAdapter[] = [...CLARITY_FEEDS.map(clarityAdapter), ohio, arkansas, missouri, virginia, delaware]
 
+export function feedAdapter(state: string): FeedAdapter | undefined {
+  return ADAPTERS.find((f) => f.state === state)
+}
+
 /** A request waits at most this long for state feeds, then uses the last good copy. */
 const BUDGET_MS = 1_500
 /** After a failure, a state's feed is not retried for this long. */
