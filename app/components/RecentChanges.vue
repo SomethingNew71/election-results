@@ -6,7 +6,8 @@ const now = useClock()
 </script>
 
 <template>
-  <section class="rounded-lg border border-rule bg-panel p-5" aria-live="polite">
+  <section class="rounded-lg border border-rule bg-panel p-5">
+    <p class="sr-only" aria-live="polite">{{ events[0] ? `${events[0].label}: ${events[0].text}` : '' }}</p>
     <h2 class="font-display text-lg font-semibold tracking-tight">Changes since you opened this page</h2>
     <p v-if="!events.length" class="text-muted mt-2 text-sm">
       Nothing yet. Leader changes, winner flags and status changes appear here as the count updates.

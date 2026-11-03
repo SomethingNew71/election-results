@@ -1,10 +1,10 @@
 import type { FeedRace, RaceKind } from '#shared/types'
-import { getJson, leadingInt, votesVersion, type FeedAdapter } from './http'
+import { getJson, leadingInt, countsFingerprint, type FeedAdapter } from './http'
 
 /**
  * Ohio Secretary of State live results (liveresults.ohiosos.gov). Statewide
  * totals only; the county breakdown is a 300 KB call per contest. The feed
- * has no version stamp, so total votes stand in for one.
+ * has no version stamp, so a fingerprint of the counts stands in for one.
  */
 const BASE = 'https://liveresults.ohiosos.gov/Api/v1/Contest'
 const CONTESTS: { query: string; match: (name: string) => { kind: RaceKind; district: string | null } | null }[] = [
@@ -68,6 +68,6 @@ export const ohio: FeedAdapter = {
     const rows = stats.allStatistics ?? []
     const find = (re: RegExp) => leadingInt(rows.find((r) => re.test(r.name ?? ''))?.value)
     const races = parseOhio(contests, { reporting: find(/Precincts Reporting/i), total: find(/Total Number of Election Day Precincts/i) })
-    return { version: votesVersion(races), races }
+    return { version: countsFingerprint(races), unordered: true, races }
   },
 }

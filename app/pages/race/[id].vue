@@ -11,9 +11,10 @@ const { data, error, dataAge, isOld, archived } = useLive<RaceDetail>(() => `/ap
 
 const inf = computed(() =>
   data.value && !data.value.testData
-    ? inferRace(data.value.candidates, data.value.pct, data.value.regions, rulesFor(data.value.state, data.value.kind))
+    ? inferRace(data.value.candidates, data.value.pct, data.value.projectionRegions ?? data.value.regions, rules.value!)
     : null,
 )
+const rules = computed(() => (data.value ? rulesFor(data.value.state, data.value.kind) : null))
 const stateFips = computed(() => (data.value ? STATE_BY_POSTAL.get(data.value.state)?.fips : undefined))
 const showCountyMap = computed(() => Boolean(stateFips.value && data.value?.regions.length && data.value.kind !== 'house'))
 
@@ -29,9 +30,11 @@ onMounted(async () => {
 const statewide = computed(() => data.value?.kind !== 'house')
 const turnout = computed(() =>
   baseline.value && statewide.value && data.value && stateFips.value && !data.value.testData
-    ? turnoutEstimate(data.value.candidates, data.value.regions, baseline.value, stateFips.value)
+    ? turnoutEstimate(data.value.candidates, data.value.projectionRegions ?? data.value.regions, baseline.value, stateFips.value)
     : null,
 )
+/** In runoff and RCV states a leader under 50% is never shown as out of reach. */
+const belowMajority = computed(() => Boolean(rules.value && (rules.value.majority || rules.value.rcv) && inf.value && inf.value.leaderShare < 0.5))
 const shiftOf = (r: RegionResult) => (baseline.value && statewide.value ? shiftVs2024(r, baseline.value) : null)
 const hasShift = computed(() => (data.value?.regions ?? []).some((r) => shiftOf(r) !== null))
 const mapMode = ref<'leader' | 'shift'>('leader')
@@ -189,10 +192,11 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
                     <dt class="text-muted">Est. votes left to count</dt>
                     <dd class="num font-semibold">{{ formatNumber(turnout.estRemaining) }}</dd>
                   </div>
-                  <div v-if="inf.runnerUp && turnout.neededShare !== null" class="flex justify-between gap-4">
+                  <div v-if="inf.runnerUp && turnout.neededShare !== null && !belowMajority" class="flex justify-between gap-4">
                     <dt class="text-muted">{{ inf.runnerUp.name }} would need</dt>
                     <dd class="num font-semibold">
-                      {{ turnout.neededShare > 1 ? 'More than remains' : formatShare(turnout.neededShare) }}
+                      <template v-if="turnout.estRemaining === 0">–</template>
+                      <template v-else>{{ turnout.neededShare > 1 ? 'More than remains' : formatShare(turnout.neededShare) }}</template>
                     </dd>
                   </div>
                 </dl>

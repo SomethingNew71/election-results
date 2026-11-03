@@ -21,6 +21,8 @@ interface Seen {
 export const CHANGE_MARK_MS = 2 * 60_000
 const MAX_EVENTS = 30
 /** Moves into or out of these statuses happen to hundreds of races at poll closing; they are not listed. */
+/** Module-level so ids stay unique when the page is left and opened again. */
+let nextId = 0
 const QUIET = new Set<InferenceStatus>(['no-votes', 'early', 'called'])
 
 /**
@@ -33,7 +35,6 @@ export function useRaceChanges(items: Ref<{ race: RaceSummary; inf: { status: In
   const events = useState<RaceChange[]>('race-changes', () => [])
   const changedAt = useState<Record<number, number>>('race-changed-at', () => ({}))
   const seen = new Map<number, Seen>()
-  let nextId = 0
 
   watch(
     items,

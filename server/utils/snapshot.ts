@@ -27,6 +27,8 @@ interface CloudflareContext {
 const INSTANCE = 'server'
 
 const ALARM_MS = 15_000
+/** A forward slower than this is abandoned and the isolate answers itself. */
+const FORWARD_TIMEOUT_MS = 2_500
 /** Keep refreshing for this long after the last request. */
 const WARM_FOR_MS = 5 * 60_000
 let lastRequestAt = 0
@@ -56,7 +58,11 @@ export async function viaSnapshot(event: H3Event): Promise<Response | null> {
   if (!ns) return null
   try {
     const url = getRequestURL(event)
-    return await ns.get(ns.idFromName(INSTANCE)).fetch(new Request(url, { headers: { accept: 'application/json' } }))
+    const forward = ns.get(ns.idFromName(INSTANCE)).fetch(new Request(url, { headers: { accept: 'application/json' } }))
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), FORWARD_TIMEOUT_MS))
+    const res = await Promise.race([forward, timeout])
+    if (!res) console.warn(`Snapshot object slower than ${FORWARD_TIMEOUT_MS} ms; answering from this isolate`)
+    return res
   } catch (err) {
     console.warn('Snapshot object unreachable; answering from this isolate', err)
     return null

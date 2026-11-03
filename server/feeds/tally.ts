@@ -120,7 +120,8 @@ export function tallyAdapter(opts: {
           getJson<TallyResults>(`${API}/Contest/GetContestResults?cId=${opts.cid}&electionID=${electionID}&contestType=${encodeURIComponent(t)}`, opts.source),
         ),
       )
-      const version = Math.max(...results.map((r) => Number(String(r.versionID).replace(/\D/g, '')) || 0))
+      // Each contest type has its own version; the sum rises when any one does.
+      const version = results.reduce((n, r) => n + (Number(String(r.versionID).replace(/\D/g, '')) || 0), 0)
       if (prev !== null && version <= prev) return { version }
       if (!names) {
         const list = await getJson<{ response: { contests: Record<string, { contestId: string; contestName: string; choices: Record<string, { name: string; isWriteIn: boolean }> | { id: string; name: string; isWriteIn: boolean }[] }> } }>(

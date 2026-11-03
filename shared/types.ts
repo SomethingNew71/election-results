@@ -98,6 +98,12 @@ export interface RegionResult {
 export interface RaceDetail extends RaceSummary, Freshness {
   /** Where `regions` came from. */
   regionSource: 'civicapi' | 'state'
+  /**
+   * civicAPI's regions when `regions` are the state's. Projections use these:
+   * a state county's % is precincts fully reported, which overstates the
+   * votes left where mail ballots are counted first.
+   */
+  projectionRegions: RegionResult[] | null
   pollsClose: string | null
   lastUpdated: string | null
   registeredVoters: number | null

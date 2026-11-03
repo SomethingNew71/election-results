@@ -140,3 +140,12 @@ describe('Delaware', () => {
     expect(races[0]!.candidates[0]!.votes).toBe(1200)
   })
 })
+
+describe('version fingerprints', () => {
+  it('changes when a correction lowers a count', async () => {
+    const { countsFingerprint } = await import('../server/feeds/http')
+    const race = (votes: number) => [{ state: 'OH', kind: 'senate', district: null, candidates: [{ name: 'A', votes }] }]
+    expect(countsFingerprint(race(100))).not.toBe(countsFingerprint(race(95)))
+    expect(countsFingerprint(race(100))).toBe(countsFingerprint(race(100)))
+  })
+})
