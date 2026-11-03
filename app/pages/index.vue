@@ -17,6 +17,8 @@ const kind = computed<RaceKind>(() => {
   return k === 'house' || k === 'governor' ? k : 'senate'
 })
 const selected = computed(() => (typeof route.query.state === 'string' ? route.query.state : null))
+/** House only: one square per district instead of state shapes. */
+const layout = computed(() => (kind.value === 'house' && route.query.layout === 'districts' ? 'districts' : 'states'))
 
 function setQuery(patch: Record<string, string | null>) {
   const query = { ...route.query, ...patch }
@@ -160,7 +162,7 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
         :key="k.kind"
         class="font-display -mb-px border-b-2 px-4 py-2 text-lg font-semibold tracking-tight transition-colors"
         :class="kind === k.kind ? 'border-ink text-ink' : 'border-transparent text-muted hover:text-ink'"
-        @click="setQuery({ view: k.kind === 'senate' ? null : k.kind, state: null })"
+        @click="setQuery({ view: k.kind === 'senate' ? null : k.kind, state: null, layout: null })"
       >
         {{ k.label }}
       </button>
@@ -198,7 +200,21 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
             </h2>
             <span class="kicker">{{ totalReporting }} with votes reported</span>
           </div>
-          <UsMap class="mt-3" :fills="fills" :selected="selected" @select="(s) => setQuery({ state: s })" />
+          <div v-if="kind === 'house'" class="mt-3 flex w-fit rounded border border-rule text-xs" role="group" aria-label="Map layout">
+            <button
+              v-for="m in ([['states', 'States'], ['districts', 'Districts']] as const)"
+              :key="m[0]"
+              type="button"
+              class="px-2.5 py-1"
+              :class="layout === m[0] ? 'bg-ink text-paper' : 'text-muted hover:text-ink'"
+              :aria-pressed="layout === m[0]"
+              @click="setQuery({ layout: m[0] === 'districts' ? 'districts' : null })"
+            >
+              {{ m[1] }}
+            </button>
+          </div>
+          <DistrictGrid v-if="layout === 'districts'" class="mt-3" :items="inferred" />
+          <UsMap v-else class="mt-3" :fills="fills" :selected="selected" @select="(s) => setQuery({ state: s })" />
           <label
             class="mt-3 flex w-fit items-center gap-2 text-sm"
             :class="holderTable ? 'cursor-pointer' : 'text-muted cursor-not-allowed'"
@@ -223,8 +239,9 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
               <span class="inline-block size-3.5 rounded-sm bg-empty" />
               No race
             </span>
-            <span v-if="kind !== 'house'">Darker shade = larger lead relative to the votes left to count</span>
+            <span v-if="kind !== 'house' || layout === 'districts'">Darker shade = larger lead relative to the votes left to count</span>
             <span v-else>Shade = share of the state's seats the leading party is ahead in</span>
+            <span v-if="layout === 'districts'">One square per district; outlined = called by civicAPI. Squares show seats, not district shapes.</span>
           </div>
         </div>
 
