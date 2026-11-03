@@ -18,12 +18,20 @@ export default defineEventHandler(async (event): Promise<RaceDetail> => {
   if (!kind) throw createError({ statusCode: 404, statusMessage: 'Race not tracked' })
   const summary = tracked ?? { id, kind, name: d.election_name, state: d.province ?? 'US', district: d.district, pct: 0, candidates: [] }
 
+  const [merged] = await applyStateFeeds([
+    {
+      ...summary,
+      name: d.election_name,
+      pct: d.percent_reporting ?? 0,
+      pctEstimated: false,
+      candidates: d.candidates.map(toCandidate),
+      crossCheck: undefined,
+    },
+  ])
+
   setResponseHeader(event, 'cache-control', 'public, max-age=15')
   return {
-    ...summary,
-    name: d.election_name,
-    pct: d.percent_reporting ?? 0,
-    candidates: d.candidates.map(toCandidate),
+    ...merged!,
     pollsClose: d.polls_close,
     lastUpdated: d.last_updated,
     registeredVoters: d.registered_voters,

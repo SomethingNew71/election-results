@@ -14,7 +14,12 @@ Live 2026 US election results on Cloudflare Workers (`election-results.classicmi
 - **`/api/race/:id` proxies only races on today's ballot** (so arbitrary ids cannot fill the isolate cache). In dev, past races are allowed — `5861` is the finished 2025 VA governor race, useful for testing with real numbers.
 - **Stale data is labelled.** `civicGet` serves an older copy for up to 10 minutes when civicAPI fails, with `stale: true`; the UI shows the data's age from `dataAsOf`, not the poll time.
 
+- **State feeds are a cross-check, never averaged.** `server/utils/stateFeeds.ts` reads Clarity ENR (CO 127407, IA 127077 — the only states with a statewide 2026 general there). `mergeFeed` (`shared/utils/crossCheck.ts`) swaps in the state's counts only when candidates match by last name and the state has counted more votes; reporting % is then scaled and marked `~`. County data stays civicAPI. A failing feed is skipped silently.
+- **Map contrast.** `--map-line` outlines every state and county at ≥3:1 against `--panel` (WCAG 1.4.11). Hawaii has a bounding-box hit area; small states also get buttons under the map.
+
 ## Gotchas
+
+- Clarity's CloudFront returns 403 to curl's default User-Agent. The descriptive UA in `cachedGet` is accepted. Do not switch to a browser UA.
 
 - A `import type { X } from '#shared/utils/foo'` in an SFC stops Nuxt auto-importing that module's values in the template (SSR 500 "Cannot read properties of undefined"). Import the values explicitly in that file.
 - `bun run build` while `nuxt dev` runs corrupts the dev server's auto-imports; restart dev after a build.

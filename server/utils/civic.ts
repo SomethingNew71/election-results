@@ -28,40 +28,52 @@ function remember(path: string, data: unknown, fetchedAt: number) {
   while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value!)
 }
 
-export async function civicGet<T>(path: string): Promise<Fetched<T>> {
-  const hit = cache.get(path)
+export function civicGet<T>(path: string): Promise<Fetched<T>> {
+  return cachedGet<T>(`${BASE}${path}`, 'civicAPI')
+}
+
+/**
+ * GET a URL with the per-isolate cache, request coalescing, a timeout and a
+ * bounded stale fallback. `parse` turns the body into data (JSON by default).
+ */
+export async function cachedGet<T>(
+  url: string,
+  sourceName: string,
+  parse: (res: Response) => Promise<unknown> = (res) => res.json(),
+): Promise<Fetched<T>> {
+  const hit = cache.get(url)
   if (hit && Date.now() - hit.fetchedAt < TTL_MS) {
     return { data: hit.data as T, fetchedAt: hit.fetchedAt, stale: false }
   }
 
-  const pending = inflight.get(path)
+  const pending = inflight.get(url)
   if (pending) return pending as Promise<Fetched<T>>
 
   const request = (async (): Promise<Fetched<unknown>> => {
     try {
-      const res = await fetch(`${BASE}${path}`, {
+      const res = await fetch(url, {
         headers: { accept: 'application/json', 'user-agent': USER_AGENT },
         signal: AbortSignal.timeout(TIMEOUT_MS),
       })
-      if (res.status === 404) throw createError({ statusCode: 404, statusMessage: 'Not found at civicAPI' })
-      if (!res.ok) throw createError({ statusCode: 502, statusMessage: `civicAPI ${res.status}` })
-      const data = await res.json()
+      if (res.status === 404) throw createError({ statusCode: 404, statusMessage: `Not found at ${sourceName}` })
+      if (!res.ok) throw createError({ statusCode: 502, statusMessage: `${sourceName} ${res.status}` })
+      const data = await parse(res)
       const fetchedAt = Date.now()
-      remember(path, data, fetchedAt)
+      remember(url, data, fetchedAt)
       return { data, fetchedAt, stale: false }
     } catch (err) {
       const isNotFound = (err as { statusCode?: number }).statusCode === 404
       if (hit && !isNotFound && Date.now() - hit.fetchedAt < MAX_STALE_MS) {
-        console.warn(`civicAPI refresh failed for ${path}; serving copy from ${new Date(hit.fetchedAt).toISOString()}`, err)
+        console.warn(`${sourceName} refresh failed for ${url}; serving copy from ${new Date(hit.fetchedAt).toISOString()}`, err)
         return { data: hit.data, fetchedAt: hit.fetchedAt, stale: true }
       }
       if (isNotFound) throw err
-      throw createError({ statusCode: 502, statusMessage: 'civicAPI is not responding' })
+      throw createError({ statusCode: 502, statusMessage: `${sourceName} is not responding` })
     } finally {
-      inflight.delete(path)
+      inflight.delete(url)
     }
   })()
-  inflight.set(path, request)
+  inflight.set(url, request)
   return request as Promise<Fetched<T>>
 }
 

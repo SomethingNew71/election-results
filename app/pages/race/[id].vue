@@ -74,7 +74,7 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
         <section class="rounded-lg border border-rule bg-panel p-5">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="num text-sm">
-              <span class="font-semibold">{{ data.pct }}%</span> <span class="text-muted">reporting ·</span>
+              <span class="font-semibold">{{ formatPct(data) }}</span> <span class="text-muted">reporting ·</span>
               <span class="font-semibold">{{ formatNumber(inf.counted) }}</span> <span class="text-muted">votes</span>
               <template v-if="pollsClose"><span class="text-muted"> · polls close {{ pollsClose }}</span></template>
             </div>
@@ -84,12 +84,16 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
 
           <div v-if="showCountyMap" class="mt-8">
             <h2 class="font-display text-lg font-semibold tracking-tight">By county</h2>
-            <p class="text-muted text-xs">Colour shows the county leader. Darker = wider county margin. Grey = no votes.</p>
+            <p class="text-muted text-xs">
+              Colour shows the county leader. Darker = wider county margin. Grey = no votes.<template v-if="data.crossCheck?.used">
+                County figures are from civicAPI.</template>
+            </p>
             <CountyMap class="mt-3" :state-fips="stateFips!" :regions="data.regions" />
           </div>
         </section>
 
         <aside class="space-y-6">
+          <CrossCheckPanel v-if="data.crossCheck" :check="data.crossCheck" />
           <section class="rounded-lg border border-rule bg-panel p-5">
             <h2 class="font-display text-lg font-semibold tracking-tight">What the count says</h2>
             <p v-if="inf.status === 'no-votes'" class="text-muted mt-2 text-sm">No votes are reported yet.</p>

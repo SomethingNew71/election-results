@@ -220,6 +220,11 @@ export function formatNumber(n: number): string {
   return Math.round(n).toLocaleString('en-US')
 }
 
+/** Reporting percentage; "~" marks a value scaled from a state feed. */
+export function formatPct(race: { pct: number; pctEstimated?: boolean }): string {
+  return `${race.pctEstimated ? '~' : ''}${Math.round(race.pct)}%`
+}
+
 export function formatShare(share: number, digits = 1): string {
   return `${(share * 100).toFixed(digits)}%`
 }

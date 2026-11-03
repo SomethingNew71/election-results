@@ -81,7 +81,7 @@ const fills = computed<Record<string, StateFill>>(() => {
             mode: 'result',
             color: best.inf.leader!.color,
             opacity: STATUS_OPACITY[best.inf.status],
-            title: `${stateName(state)}: ${best.inf.leader!.name} — ${STATUS_LABEL[best.inf.status]}, ${best.race.pct}% reporting`,
+            title: `${stateName(state)}: ${best.inf.leader!.name} — ${STATUS_LABEL[best.inf.status]}, ${formatPct(best.race)} reporting`,
           }
   }
   if (showHolders.value && holderTable.value) {
@@ -213,7 +213,7 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
                   </NuxtLink>
                   <StatusTag :status="inf.status" :color="inf.leader?.color" />
                 </div>
-                <div class="kicker mt-1">{{ race.pct }}% reporting · {{ formatNumber(inf.counted) }} votes</div>
+                <div class="kicker mt-1">{{ formatPct(race) }} reporting · {{ formatNumber(inf.counted) }} votes</div>
                 <CandidateRows class="mt-3" :candidates="race.candidates" :limit="3" compact />
               </article>
             </div>
@@ -273,7 +273,14 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
                   <span v-else class="text-muted">–</span>
                 </td>
                 <td class="num py-2 pr-3 text-right">{{ inf.counted ? formatShare(inf.marginShare) : '–' }}</td>
-                <td class="num py-2 pr-3 text-right">{{ race.pct }}%</td>
+                <td class="num py-2 pr-3 text-right">
+                  {{ formatPct(race) }}
+                  <span
+                    v-if="race.crossCheck"
+                    class="kicker ml-1 rounded border border-rule px-1"
+                    :title="race.crossCheck.used ? `Counts from ${race.crossCheck.source}` : `Cross-checked against ${race.crossCheck.source}`"
+                  >{{ race.crossCheck.used ? 'State' : '✓' }}</span>
+                </td>
                 <td class="num py-2 pr-3 text-right">
                   {{ inf.neededShare !== null && inf.neededShare <= 1 && inf.status !== 'called' ? formatShare(inf.neededShare, 0) : '–' }}
                 </td>
