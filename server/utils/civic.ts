@@ -28,13 +28,24 @@ function remember(path: string, data: unknown, fetchedAt: number) {
   while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value!)
 }
 
-export function civicGet<T>(path: string): Promise<Fetched<T>> {
-  return cachedGet<T>(`${BASE}${path}`, 'civicAPI')
+export function civicGet<T>(path: string, waitUntil?: WaitUntil): Promise<Fetched<T>> {
+  return cachedGet<T>(`${BASE}${path}`, 'civicAPI', undefined, undefined, waitUntil)
 }
 
+export type WaitUntil = (p: Promise<unknown>) => void
+
 /**
- * GET a URL with the per-isolate cache, request coalescing, a timeout and a
- * bounded stale fallback. `parse` turns the body into data (JSON by default).
+ * Past TTL_MS and up to this age, the cached copy is served at once while a
+ * refresh runs in the background. civicAPI misses take about 2 s. The copy's
+ * real age reaches the page through `dataAsOf`.
+ */
+const SWR_MS = 90_000
+
+/**
+ * GET a URL with the per-isolate cache, request coalescing, a timeout,
+ * stale-while-revalidate and a bounded stale fallback. `parse` turns the body
+ * into data (JSON by default). Pass `waitUntil` so background refreshes
+ * outlive the response.
  */
 export async function cachedGet<T>(
   url: string,
@@ -42,14 +53,17 @@ export async function cachedGet<T>(
   parse: (res: Response) => Promise<unknown> = (res) => res.json(),
   /** Cache under a stable key when the URL changes per version. */
   key = url,
+  waitUntil?: WaitUntil,
 ): Promise<Fetched<T>> {
   const hit = cache.get(key)
-  if (hit && Date.now() - hit.fetchedAt < TTL_MS) {
+  const age = hit ? Date.now() - hit.fetchedAt : Infinity
+  if (hit && age < TTL_MS) {
     return { data: hit.data as T, fetchedAt: hit.fetchedAt, stale: false }
   }
 
   const pending = inflight.get(key)
-  if (pending) return pending as Promise<Fetched<T>>
+  if (pending && !(hit && age < SWR_MS)) return pending as Promise<Fetched<T>>
+  if (pending) return { data: hit!.data as T, fetchedAt: hit!.fetchedAt, stale: false }
 
   const request = (async (): Promise<Fetched<unknown>> => {
     try {
@@ -76,6 +90,10 @@ export async function cachedGet<T>(
     }
   })()
   inflight.set(key, request)
+  if (hit && age < SWR_MS) {
+    waitUntil?.(request.catch(() => {}))
+    return { data: hit.data as T, fetchedAt: hit.fetchedAt, stale: false }
+  }
   return request as Promise<Fetched<T>>
 }
 
@@ -188,12 +206,13 @@ export interface TrackedRaces {
 }
 
 /** Senate, House and Governor races on today's ballot, from two search calls. */
-export async function trackedRaces(): Promise<TrackedRaces> {
+export async function trackedRaces(waitUntil?: WaitUntil): Promise<TrackedRaces> {
   const scopes = ['General', 'Statewide'] as const
   const results = await Promise.all(
     scopes.map((scope) =>
       civicGet<{ races: CivicRace[] }>(
         `/race/search?country=US&startDate=${ELECTION_DATE}&endDate=${ELECTION_DATE}&election_type=${scope}&limit=5000`,
+        waitUntil,
       ),
     ),
   )

@@ -7,7 +7,8 @@ const CHAMBERS: ChamberTotals[] = [
 ]
 
 export default defineEventHandler(async (event): Promise<Overview> => {
-  const [tracked, feeds] = await Promise.all([trackedRaces(), stateFeedRaces()])
+  const waitUntil = (p: Promise<unknown>) => event.waitUntil(p)
+  const [tracked, feeds] = await Promise.all([trackedRaces(waitUntil), stateFeedRaces(waitUntil)])
   const races = applyFeeds(tracked.races, feeds)
   setResponseHeader(event, 'cache-control', 'public, max-age=15')
   return { dataAsOf: new Date(tracked.fetchedAt).toISOString(), stale: tracked.stale, races, chambers: CHAMBERS }

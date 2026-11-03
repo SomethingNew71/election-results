@@ -9,11 +9,12 @@ export default defineEventHandler(async (event): Promise<RaceDetail> => {
 
   // Only proxy races on today's ballot, so arbitrary ids cannot fill the cache.
   // In dev, past races (for example 5861, the finished 2025 VA governor race) are allowed for testing.
-  const [{ races }, feeds] = await Promise.all([trackedRaces(), stateFeedRaces()])
+  const waitUntil = (p: Promise<unknown>) => event.waitUntil(p)
+  const [{ races }, feeds] = await Promise.all([trackedRaces(waitUntil), stateFeedRaces(waitUntil)])
   const tracked = races.find((r) => r.id === id)
   if (!tracked && !import.meta.dev) throw createError({ statusCode: 404, statusMessage: 'Race not tracked' })
 
-  const { data: d, fetchedAt, stale } = await civicGet<CivicRaceDetail>(`/race/${id}`)
+  const { data: d, fetchedAt, stale } = await civicGet<CivicRaceDetail>(`/race/${id}`, waitUntil)
   const kind = kindOf(d.election_type)
   if (!kind) throw createError({ statusCode: 404, statusMessage: 'Race not tracked' })
   const base = {

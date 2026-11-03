@@ -110,12 +110,15 @@ function refreshFeed(f: Feed): Promise<void> {
 }
 
 /**
- * Feed races keyed by state, kind and district. Waits up to BUDGET_MS for a
- * refresh, so a slow or blocked feed never holds up the page.
+ * Feed races keyed by state, kind and district. Once every state has a copy,
+ * refreshes run in the background (`waitUntil`) and the request never waits.
+ * Before that, it waits up to BUDGET_MS, so a slow or blocked feed never
+ * holds up the page.
  */
-export async function stateFeedRaces(): Promise<FeedMap> {
+export async function stateFeedRaces(waitUntil?: (p: Promise<unknown>) => void): Promise<FeedMap> {
   const refresh = Promise.allSettled(CLARITY_FEEDS.map(refreshFeed))
-  await Promise.race([refresh, new Promise((resolve) => setTimeout(resolve, BUDGET_MS))])
+  if (waitUntil && CLARITY_FEEDS.every((f) => latest.has(f.state))) waitUntil(refresh)
+  else await Promise.race([refresh, new Promise((resolve) => setTimeout(resolve, BUDGET_MS))])
   const out: FeedMap = new Map()
   for (const { races, meta } of latest.values()) {
     for (const race of races) out.set(feedKey(race), { race, meta })
