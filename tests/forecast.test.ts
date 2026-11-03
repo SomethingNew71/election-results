@@ -62,11 +62,44 @@ describe('parseForecast', () => {
 
   it('survives a payload with fields missing', () => {
     const c = parseForecast('governor', 26, { states: { AK: { rating: null } }, monte_carlo: { prob_democrat_majority: 66.9 } }, ids)
-    expect(c.totals).toBeNull()
+    expect(c.totals).toMatchObject({ dem: 0, rep: 0, unrated: 1 })
+    expect(c.publishedTotals).toBeNull()
+    expect(c.simulationIssues).toEqual([])
     expect(c.seats).toBeNull()
     expect(c.majorityThreshold).toBe(26)
     expect(c.probRep).toBeNull()
     expect(c.races[0]!.rating).toBe('Unrated')
     expect(parseForecast('house', 218, {}, ids).races).toEqual([])
+  })
+
+  it('counts seats by rating plus seats not up, as civicAPI\'s site does', () => {
+    const c = parseForecast(
+      'senate',
+      51,
+      {
+        totals: { democrat: 62, republican: 59, tossup: 1, independent: 0 },
+        states: { CO: { rating: 'Safe D' }, IA: { rating: 'Tossup' }, AL: { rating: 'Safe R' }, NE: { rating: 'Tilt I' } },
+      },
+      ids,
+      { Democratic: 32, Independent: 2, Republican: 31 },
+    )
+    expect(c.totals).toEqual({ dem: 33, rep: 32, ind: 3, tossup: 1, unrated: 0, notUp: { dem: 32, rep: 31, ind: 2 } })
+    expect(c.publishedTotals).toEqual({ dem: 62, rep: 59, tossup: 1, ind: 0 })
+  })
+
+  it('lists simulation figures that cannot all be true', () => {
+    const broken = parseForecast(
+      'senate',
+      51,
+      {
+        monte_carlo: { prob_democrat_majority: 100, prob_republican_majority: 100, democrat_seats_p50: 63, republican_seats_p50: 63, expected_democrat_seats: 62.7, expected_republican_seats: 62.8 },
+        distribution: { bins: [{ seats: 101, probability: 0 }] },
+      },
+      ids,
+    )
+    expect(broken.simulationIssues).toHaveLength(4)
+    expect(broken.simulationIssues[0]).toContain('both parties a majority')
+    const fine = parseForecast('house', 218, { monte_carlo: { prob_democrat_majority: 96, prob_republican_majority: 3.5, democrat_seats_p50: 240, republican_seats_p50: 195 } }, ids)
+    expect(fine.simulationIssues).toEqual([])
   })
 })

@@ -161,7 +161,15 @@ export interface ForecastNational {
 export interface ForecastChamber {
   kind: RaceKind
   updated: string
-  totals: { dem: number; rep: number; tossup: number; ind: number } | null
+  /**
+   * Seats not up plus races counted by rating, as civicAPI's site shows them.
+   * civicAPI's API `totals` can disagree (Senate 2026-11-03: 126 of 100).
+   */
+  totals: { dem: number; rep: number; ind: number; tossup: number; unrated: number; notUp: { dem: number; rep: number; ind: number } }
+  /** civicAPI's API `totals`, shown only when they differ from `totals`. */
+  publishedTotals: { dem: number; rep: number; tossup: number; ind: number } | null
+  /** Why the simulation figures do not add up; when not empty the page hides the majority chances, seat ranges and distribution. */
+  simulationIssues: string[]
   majorityThreshold: number
   /** Percent. */
   probDem: number | null

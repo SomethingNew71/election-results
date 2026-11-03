@@ -11,10 +11,6 @@ const archived = useArchive()
       </NuxtLink>
       <div class="max-w-sm text-sm">
         <p class="text-muted">Live vote counts and arithmetic estimates. No ratings, endorsements or race calls of our own.</p>
-        <nav class="mt-1 flex gap-3" aria-label="Pages">
-          <NuxtLink to="/" class="underline-offset-2 hover:underline" active-class="font-semibold" exact-active-class="font-semibold">Results</NuxtLink>
-          <NuxtLink v-if="!archived" to="/forecast" class="text-muted underline-offset-2 hover:text-ink hover:underline" active-class="font-semibold !text-ink">civicAPI forecast</NuxtLink>
-        </nav>
       </div>
     </header>
 

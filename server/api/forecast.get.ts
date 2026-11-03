@@ -1,11 +1,13 @@
 import type { ForecastChamber, ForecastData, RaceKind } from '#shared/types'
+import { countParties, GOVERNOR_NOT_UP, SENATE_NOT_UP } from '#shared/utils/officeholders'
 import { parseForecast, type CivicForecast } from '../utils/forecast'
 
-const CHAMBERS: { kind: RaceKind; threshold: number }[] = [
-  { kind: 'senate', threshold: 51 },
-  { kind: 'house', threshold: 218 },
+/** `holdovers` are the seats not up, by party (shared/utils/officeholders.ts). */
+const CHAMBERS: { kind: RaceKind; threshold: number; holdovers: Record<string, number> }[] = [
+  { kind: 'senate', threshold: 51, holdovers: countParties(SENATE_NOT_UP) },
+  { kind: 'house', threshold: 218, holdovers: {} },
   // civicAPI publishes no threshold for governors; a majority of 50 states is 26.
-  { kind: 'governor', threshold: 26 },
+  { kind: 'governor', threshold: 26, holdovers: countParties(GOVERNOR_NOT_UP) },
 ]
 /** Links to race pages are optional; the forecast does not wait long for the race list. */
 const LINK_BUDGET_MS = 300
@@ -42,7 +44,7 @@ export default defineEventHandler(async (event): Promise<ForecastData | Response
       missing.push(c.kind)
       return
     }
-    chambers.push(parseForecast(c.kind, c.threshold, s.value.data, ids))
+    chambers.push(parseForecast(c.kind, c.threshold, s.value.data, ids, c.holdovers))
     oldest = Math.min(oldest, s.value.fetchedAt)
     stale ||= s.value.stale
   })
