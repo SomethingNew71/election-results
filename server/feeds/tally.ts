@@ -126,7 +126,8 @@ export function parseTallyBreakdown(
     }
   })
   const votes = alignByName(race.candidates, rows, ids.length)
-  return votes && { types: ids.map((id) => typeNames.get(id) ?? 'Other'), votes }
+  // An id the election info does not name keeps a distinct label, so two unknown types never share a column name.
+  return votes && { types: ids.map((id) => typeNames.get(id) ?? `Other (${id.slice(0, 8)})`), votes }
 }
 
 export function tallyAdapter(opts: {
@@ -142,7 +143,7 @@ export function tallyAdapter(opts: {
 }): FeedAdapter {
   let electionID: string | null = null
   let names: TallyNames | null = null
-  let typeNames: Map<string, string> | null = null
+  let typeNames: Promise<Map<string, string>> | null = null
   return {
     state: opts.state,
     source: opts.source,
@@ -185,19 +186,27 @@ export function tallyAdapter(opts: {
       const [type, contestID] = race.ref.split('|') as [string, string]
       const meta = names[contestID]
       if (!meta) return null
-      if (!typeNames) {
-        // About 600 KB (it lists every location); fetched once per object lifetime.
-        const info = await getJson<{ response?: { voteTypes?: Record<string, { description: string }> } }>(
-          `${API}/Election/GetElectionInfo?cId=${opts.cid}&electionID=${electionID}`,
-          opts.source,
-        )
-        typeNames = new Map(Object.entries(info.response?.voteTypes ?? {}).map(([id, v]) => [id, v.description]))
-      }
+      // About 600 KB (it lists every location). One shared request; an empty answer is not kept.
+      typeNames ??= getJson<{ response?: { voteTypes?: Record<string, { description: string }> } }>(
+        `${API}/Election/GetElectionInfo?cId=${opts.cid}&electionID=${electionID}`,
+        opts.source,
+      ).then((info) => {
+        const map = new Map(Object.entries(info.response?.voteTypes ?? {}).map(([id, v]) => [id, v.description]))
+        if (!map.size) throw new Error(`${opts.source}: no vote types in election info`)
+        return map
+      })
+      const known = await typeNames.catch((err) => {
+        typeNames = null
+        throw err
+      })
       const data = await getJson<TallySingleContest>(
         `${API}/Contest/GetSingleContestResults?cId=${opts.cid}&electionID=${electionID}&contestType=${encodeURIComponent(type)}&contestID=${encodeURIComponent(contestID)}`,
         opts.source,
       )
-      return parseTallyBreakdown(race, data, meta, typeNames)
+      const split = parseTallyBreakdown(race, data, meta, known)
+      // A type added during the night is learned on the next request.
+      if (split?.types.some((t) => t.startsWith('Other ('))) typeNames = null
+      return split
     },
   }
 }
