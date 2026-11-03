@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Overview, RaceKind, RaceSummary } from '#shared/types'
 import type { StateFill } from '~/components/UsMap.vue'
+import { STATUS_HELP, STATUS_LABEL, STATUS_OPACITY, STATUS_RANK, formatNumber, formatPct, formatShare, inferRace, totalVotes } from '#shared/utils/inference'
 import { POLL_CLOSINGS, pollsHaveClosed } from '#shared/utils/pollClosings'
 import { CHANGE_MARK_MS } from '~/composables/useRaceChanges'
 
