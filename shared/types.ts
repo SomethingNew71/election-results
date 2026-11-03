@@ -132,3 +132,45 @@ export interface RaceDetail extends RaceSummary, Freshness {
   /** The state's count split by vote type, when its feed publishes one. */
   voteTypes: VoteTypeBreakdown | null
 }
+
+/** civicAPI's pre-election forecast. Shown only on /forecast; nothing else reads it. */
+export interface ForecastRace {
+  /** "IA" for statewide races, "IA-03" / "AK-AL" for House seats. */
+  key: string
+  state: string
+  rating: string
+  /** Win chances in percent, as published. */
+  dem: number
+  rep: number
+  ind: number
+  incumbentParty: string
+  candidates: { party: string; name: string }[]
+  /** Our race page, when exactly one tracked race matches. */
+  raceId: number | null
+}
+
+export interface ForecastChamber {
+  kind: RaceKind
+  updated: string
+  totals: { dem: number; rep: number; tossup: number; ind: number }
+  majorityThreshold: number
+  /** Percent. */
+  probDem: number | null
+  probRep: number | null
+  seats: { simulations: number; expectedDem: number; expectedRep: number; dem: [number, number, number]; rep: [number, number, number] } | null
+  distribution: { seats: number; probability: number; control: string }[]
+  weights: Record<string, number>
+  sources: Record<string, string[]>
+  races: ForecastRace[]
+}
+
+export interface ForecastNational {
+  popularVote: { dem: number; rep: number; districts: number; sources: string[] } | null
+  seatShare: { dem: number; rep: number } | null
+  genericBallot: { dem: number; rep: number; polls: number } | null
+}
+
+export interface ForecastData extends Freshness {
+  chambers: ForecastChamber[]
+  national: ForecastNational | null
+}
