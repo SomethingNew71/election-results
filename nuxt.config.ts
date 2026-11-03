@@ -4,6 +4,12 @@ export default defineNuxtConfig({
   compatibilityDate: '2026-11-01',
   devtools: { enabled: false },
   css: ['~/assets/css/main.css'],
+  runtimeConfig: {
+    public: {
+      // ARCHIVE=1 at build time: pages read the frozen snapshot in public/archive/ (scripts/archive.ts) and stop polling.
+      archive: process.env.ARCHIVE === '1',
+    },
+  },
   vite: {
     plugins: [tailwindcss()],
   },

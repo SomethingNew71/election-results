@@ -8,10 +8,14 @@ export const REFRESH_MS = 30_000
  * `dataAge` is the age of the data at civicAPI's end, not of the last poll.
  */
 export function useLive<T extends Freshness>(url: MaybeRefOrGetter<string>, key: MaybeRefOrGetter<string>) {
-  const result = useFetch<T>(url, { key, watch: [() => toValue(url)] })
+  const archived = useArchive()
+  const source = () => (archived ? archivePath(toValue(url)) : toValue(url))
+  // Archive files are static assets, which server rendering cannot fetch; load them in the browser.
+  const result = useFetch<T>(source, { key, watch: [source], server: !archived })
   const now = useClock()
 
   onMounted(() => {
+    if (archived) return
     const refresher = setInterval(() => {
       if (document.visibilityState === 'visible') result.refresh()
     }, REFRESH_MS)
@@ -30,8 +34,24 @@ export function useLive<T extends Freshness>(url: MaybeRefOrGetter<string>, key:
     return asOf ? Math.max(0, Math.round((now.value - Date.parse(asOf)) / 1000)) : null
   })
   /** True when the data is old enough that users should be told. */
-  const isOld = computed(() => Boolean(result.data.value?.stale) || (dataAge.value ?? 0) > 120)
-  return { ...result, dataAge, isOld }
+  const isOld = computed(() => !archived && (Boolean(result.data.value?.stale) || (dataAge.value ?? 0) > 120))
+  return { ...result, dataAge, isOld, archived }
+}
+
+/** True when the site serves the frozen final snapshot instead of live data. */
+export function useArchive(): boolean {
+  return Boolean(useRuntimeConfig().public.archive)
+}
+
+/** /api/overview → /archive/overview.json; /api/race/123 → /archive/race/123.json. */
+export function archivePath(url: string): string {
+  return `${url.replace(/^\/api\//, '/archive/')}.json`
+}
+
+export function formatSnapshot(iso: string | undefined): string {
+  return iso
+    ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York', timeZoneName: 'short' })
+    : '–'
 }
 
 const clock = ref(0)
