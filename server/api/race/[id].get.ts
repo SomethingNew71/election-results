@@ -39,7 +39,7 @@ export default defineEventHandler(async (event): Promise<RaceDetail | Response> 
     merged && feed
       ? feedRegions(merged, feed)?.map((r) => ({
           ...r,
-          fips: r.fips ?? fipsByName.get(countyKey(r.name)) ?? null,
+          fips: r.fips ?? fipsByName.get(countyKey(r.name)) ?? warnUnmatched(merged.state, r.name),
           name: r.fips ? (nameByFips.get(r.fips) ?? r.name) : r.name,
         }))
       : null
@@ -56,8 +56,19 @@ export default defineEventHandler(async (event): Promise<RaceDetail | Response> 
     stale,
     regions: stateRegions ?? civicRegions,
     regionSource: stateRegions ? 'state' : 'civicapi',
+    projectionRegions: stateRegions ? civicRegions : null,
   }
 })
+
+const warned = new Set<string>()
+/** A state county name civicAPI does not use: the map still matches by name, but the 2024 baseline skips it. */
+function warnUnmatched(state: string, name: string): null {
+  if (!/^\d{5}$/.test(name) && !warned.has(`${state}|${name}`)) {
+    warned.add(`${state}|${name}`)
+    console.warn(`State county "${name}" (${state}) has no civicAPI FIPS match`)
+  }
+  return null
+}
 
 function countyKey(name: string): string {
   return name.toLowerCase().replace(/\bst\.?\s/g, 'saint ').replace(/\bcounty\b/g, '').replace(/[^a-z]/g, '')

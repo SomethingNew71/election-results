@@ -1,10 +1,10 @@
 import type { FeedRace, RaceKind } from '#shared/types'
-import { getJson, votesVersion, type FeedAdapter } from './http'
+import { getJson, countsFingerprint, type FeedAdapter } from './http'
 
 /**
  * Delaware Department of Elections results on the state open-data portal
  * (Socrata dataset yg7x-kgjc): one row per candidate, statewide only, with
- * no reporting-unit counts. Total votes stand in for a version.
+ * no reporting-unit counts. A fingerprint of the counts stands in for a version.
  */
 const URL = 'https://data.delaware.gov/resource/yg7x-kgjc.json?election_name=2026%20General%20Election&$limit=1000'
 
@@ -41,6 +41,6 @@ export const delaware: FeedAdapter = {
   sourceUrl: 'https://elections.delaware.gov/results/enr/GE2026.html',
   async load() {
     const races = parseDelaware(await getJson<DelawareRow[]>(URL, this.source))
-    return { version: votesVersion(races), races }
+    return { version: countsFingerprint(races), unordered: true, races }
   },
 }

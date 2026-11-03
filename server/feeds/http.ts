@@ -12,8 +12,18 @@ export async function getJson<T>(url: string, source: string): Promise<T> {
   return (await res.json()) as T
 }
 
-/** Total votes across races: the version for feeds that publish no version stamp. */
-export function votesVersion(races: { candidates: { votes: number }[] }[]): number {
+/**
+ * A fingerprint of every count, for feeds that publish no version stamp. It
+ * changes on any change, including a correction that lowers a total.
+ */
+export function countsFingerprint(races: { state: string; kind: string; district: string | null; candidates: { name: string; votes: number }[] }[]): number {
+  const text = races.map((r) => `${r.kind}${r.district}:${r.candidates.map((c) => `${c.name}=${c.votes}`).join(',')}`).join('|')
+  let h = 2166136261
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619)
+  return h >>> 0
+}
+
+export function totalVotes(races: { candidates: { votes: number }[] }[]): number {
   return races.reduce((n, r) => n + r.candidates.reduce((m, c) => m + c.votes, 0), 0)
 }
 
@@ -27,6 +37,8 @@ export function leadingInt(s: string | number | null | undefined): number {
 export interface FeedLoad {
   /** Higher means newer. A load whose version is not higher than the last one is ignored. */
   version: number
+  /** The version is a fingerprint, not ordered: any different value is newer. */
+  unordered?: boolean
   /** Omitted when the version shows nothing changed. */
   races?: import('#shared/types').FeedRace[]
 }

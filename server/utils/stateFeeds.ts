@@ -1,5 +1,5 @@
 import type { FeedRace, FeedRegion, RaceKind, RaceSummary } from '#shared/types'
-import type { FeedAdapter } from '../feeds/http'
+import { totalVotes, type FeedAdapter } from '../feeds/http'
 import { delaware } from '../feeds/delaware'
 import { ohio } from '../feeds/ohio'
 import { arkansas, missouri } from '../feeds/tally'
@@ -142,7 +142,8 @@ const TIMEOUT_MS = 8_000
 /**
  * Latest parsed feed per state. Only the small parsed races are kept, and a
  * version not higher than one already applied is ignored, so counts never
- * move backwards between polls. Feeds without a version stamp use total votes.
+ * move backwards between polls. Feeds without a version stamp use a
+ * fingerprint of the counts, so a correction that lowers a total is applied.
  */
 const latest = new Map<string, { version: number; races: FeedRace[]; meta: FeedMeta }>()
 const failedAt = new Map<string, number>()
@@ -161,7 +162,10 @@ function refreshFeed(f: FeedAdapter): Promise<void> {
     const prev = latest.get(f.state)
     const loaded = await f.load(prev?.version ?? null)
     const checkedAt = new Date().toISOString()
-    if (prev && (!loaded.races || loaded.version <= prev.version)) {
+    const isNewer = (v: number) => (loaded.unordered ? v !== prev!.version : v > prev!.version)
+    // A feed that drops to zero votes after reporting is a reset or a bad read, not a correction.
+    const wentBlank = prev && loaded.races && totalVotes(loaded.races) === 0 && totalVotes(prev.races) > 0
+    if (prev && (!loaded.races || !isNewer(loaded.version) || wentBlank)) {
       prev.meta.checkedAt = checkedAt
       return
     }

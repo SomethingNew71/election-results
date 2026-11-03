@@ -8,7 +8,10 @@ const TTL_MS = 20_000
 /** Past this age, stale data is an error instead of a fallback. */
 const MAX_STALE_MS = 10 * 60_000
 const TIMEOUT_MS = 8_000
-const MAX_ENTRIES = 200
+/** One Durable Object serves every reader, so this holds all ~510 race details at once. */
+const MAX_ENTRIES = 2_000
+/** Never evicted: losing these makes the overview cold and loses its stale fallback. */
+const PINNED = /\/race\/search\?|current_ver\.txt$/
 
 export interface Fetched<T> {
   data: T
@@ -25,7 +28,10 @@ function remember(path: string, data: unknown, fetchedAt: number) {
   cache.delete(path)
   cache.set(path, { fetchedAt, data })
   // Map keeps insertion order, so the first key is the least recently written.
-  while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value!)
+  for (const key of cache.keys()) {
+    if (cache.size <= MAX_ENTRIES) break
+    if (!PINNED.test(key)) cache.delete(key)
+  }
 }
 
 export function civicGet<T>(path: string, waitUntil?: WaitUntil): Promise<Fetched<T>> {
