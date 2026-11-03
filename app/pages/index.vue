@@ -275,12 +275,18 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
               Click a state on the map to see its {{ kind === 'house' ? 'districts' : 'race' }}. Each race page has a county map and the
               full vote-count inference.
             </p>
-            <dl class="mt-5 space-y-3 text-sm">
-              <div v-for="s in (['competitive', 'lean', 'strong', 'decided', 'close', 'runoff', 'rcv', 'called'] as const)" :key="s">
-                <dt><StatusTag :status="s" /></dt>
-                <dd class="text-muted mt-1">{{ STATUS_HELP[s] }}</dd>
-              </div>
-            </dl>
+            <details class="group mt-3">
+              <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+                What the statuses mean
+                <span aria-hidden="true" class="text-muted text-lg leading-none transition-transform group-open:rotate-90">▸</span>
+              </summary>
+              <dl class="mt-2 space-y-3 text-sm">
+                <div v-for="s in (['competitive', 'lean', 'strong', 'decided', 'close', 'runoff', 'rcv', 'called'] as const)" :key="s">
+                  <dt><StatusTag :status="s" /></dt>
+                  <dd class="text-muted mt-1">{{ STATUS_HELP[s] }}</dd>
+                </div>
+              </dl>
+            </details>
           </template>
         </aside>
         <RecentChanges v-if="!archived" :events="events" />
