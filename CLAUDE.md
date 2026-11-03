@@ -33,6 +33,7 @@ Live 2026 US election results on Cloudflare Workers (`election-results.classicmi
 - Clarity's CloudFront returns 403 to curl's default User-Agent. The descriptive UA in `cachedGet` is accepted. Do not switch to a browser UA.
 
 - A `import type { X } from '#shared/utils/foo'` in an SFC stops Nuxt auto-importing that module's values in the template (SSR 500 "Cannot read properties of undefined"). Import the values explicitly in that file.
+- Nuxt's export scan omits `STATUS_LABEL` (`.nuxt/imports.d.ts` lists a false `string` export instead), so it must be imported by name. On 2026-11-03 this took `/` down with a 500 when the first race had votes, because the only use without an import ran only on a race with votes. `tests/autoImports.test.ts` guards it.
 - `bun run build` while `nuxt dev` runs corrupts the dev server's auto-imports; restart dev after a build.
 - `vue-tsc` does not run against the installed TypeScript version; `nuxt typecheck` fails. Rely on `bun run build`, `bun run test` and a browser check.
 - civicAPI attribution is required (footer link).
