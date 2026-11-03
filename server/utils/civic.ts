@@ -1,39 +1,68 @@
 import type { Candidate, RaceKind, RaceSummary, RegionResult } from '#shared/types'
 
 const BASE = 'https://civicapi.org/api/v2'
-const USER_AGENT = 'election-results-worker (+https://civicapi.org attribution)'
+const USER_AGENT = 'election-results-worker (+https://github.com/SomethingNew71/election-results)'
 
-/** Upstream responses are cached per isolate. civicAPI itself caches for 15 s. */
+/** Fresh window per isolate. civicAPI itself caches for 15 s. */
 const TTL_MS = 20_000
-const cache = new Map<string, { at: number; data: unknown }>()
-const inflight = new Map<string, Promise<unknown>>()
+/** Past this age, stale data is an error instead of a fallback. */
+const MAX_STALE_MS = 10 * 60_000
+const TIMEOUT_MS = 8_000
+const MAX_ENTRIES = 200
 
-export async function civicGet<T>(path: string, ttlMs = TTL_MS): Promise<T> {
+export interface Fetched<T> {
+  data: T
+  /** When this copy came from civicAPI (ms epoch). */
+  fetchedAt: number
+  /** True when a refresh failed and an older copy is being served. */
+  stale: boolean
+}
+
+const cache = new Map<string, { fetchedAt: number; data: unknown }>()
+const inflight = new Map<string, Promise<Fetched<unknown>>>()
+
+function remember(path: string, data: unknown, fetchedAt: number) {
+  cache.delete(path)
+  cache.set(path, { fetchedAt, data })
+  // Map keeps insertion order, so the first key is the least recently written.
+  while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value!)
+}
+
+export async function civicGet<T>(path: string): Promise<Fetched<T>> {
   const hit = cache.get(path)
-  if (hit && Date.now() - hit.at < ttlMs) return hit.data as T
+  if (hit && Date.now() - hit.fetchedAt < TTL_MS) {
+    return { data: hit.data as T, fetchedAt: hit.fetchedAt, stale: false }
+  }
 
   const pending = inflight.get(path)
-  if (pending) return pending as Promise<T>
+  if (pending) return pending as Promise<Fetched<T>>
 
-  const request = (async () => {
+  const request = (async (): Promise<Fetched<unknown>> => {
     try {
       const res = await fetch(`${BASE}${path}`, {
         headers: { accept: 'application/json', 'user-agent': USER_AGENT },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
       })
+      if (res.status === 404) throw createError({ statusCode: 404, statusMessage: 'Not found at civicAPI' })
       if (!res.ok) throw createError({ statusCode: 502, statusMessage: `civicAPI ${res.status}` })
       const data = await res.json()
-      cache.set(path, { at: Date.now(), data })
-      return data
+      const fetchedAt = Date.now()
+      remember(path, data, fetchedAt)
+      return { data, fetchedAt, stale: false }
     } catch (err) {
-      // Serve stale data rather than an error while upstream is struggling.
-      if (hit) return hit.data
-      throw err
+      const isNotFound = (err as { statusCode?: number }).statusCode === 404
+      if (hit && !isNotFound && Date.now() - hit.fetchedAt < MAX_STALE_MS) {
+        console.warn(`civicAPI refresh failed for ${path}; serving copy from ${new Date(hit.fetchedAt).toISOString()}`, err)
+        return { data: hit.data, fetchedAt: hit.fetchedAt, stale: true }
+      }
+      if (isNotFound) throw err
+      throw createError({ statusCode: 502, statusMessage: 'civicAPI is not responding' })
     } finally {
       inflight.delete(path)
     }
   })()
   inflight.set(path, request)
-  return request as Promise<T>
+  return request as Promise<Fetched<T>>
 }
 
 export interface CivicCandidate {
@@ -68,21 +97,28 @@ export interface CivicRaceDetail {
   registered_voters: number | null
   percent_reporting: number
   test_data: boolean
+  is_disputed: boolean
   candidates: CivicCandidate[]
   region_results: Record<
     string,
-    { name: string; fips?: string; percent_reporting: number; candidates: CivicCandidate[] }
+    { name: string; type: string; fips?: string; percent_reporting: number; candidates: CivicCandidate[] }
   > | null
 }
 
-const NEUTRAL = '#8a8a8a'
+export function parseVotes(v: number | string): number {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0
+  const n = Number(String(v).replace(/[^0-9.]/g, ''))
+  if (!Number.isFinite(n)) console.warn(`Unparseable vote count from civicAPI: ${v}`)
+  return Number.isFinite(n) ? n : 0
+}
 
 export function toCandidate(c: CivicCandidate): Candidate {
+  const party = c.party || 'Unaffiliated'
   return {
     name: c.name,
-    party: c.party || 'Unaffiliated',
-    color: c.color || NEUTRAL,
-    votes: Number(c.votes) || 0,
+    party,
+    color: partyColor(party),
+    votes: parseVotes(c.votes),
     winner: Boolean(c.winner),
     incumbent: c.incumbent,
   }
@@ -107,12 +143,57 @@ export function toSummary(r: CivicRace, kind: RaceKind): RaceSummary {
   }
 }
 
+/**
+ * Some races list overlapping region types (Alaska: boroughs AND house
+ * districts AND a statewide row; Maine: counties AND townships). Keep one
+ * non-overlapping type so votes are not counted twice.
+ */
+const REGION_TYPE_PREFERENCE = ['County', 'Parish', 'Borough', 'Township', 'House District']
+
 export function toRegions(detail: CivicRaceDetail): RegionResult[] {
-  return Object.entries(detail.region_results ?? {}).map(([key, r]) => ({
-    key,
-    name: r.name,
-    fips: r.fips ?? null,
-    pct: r.percent_reporting ?? 0,
-    candidates: r.candidates.map(toCandidate),
-  }))
+  const entries = Object.entries(detail.region_results ?? {})
+  const types = new Set(entries.map(([, r]) => r.type))
+  const keep = REGION_TYPE_PREFERENCE.find((t) => types.has(t))
+  return entries
+    .filter(([, r]) => (keep ? r.type === keep : r.type !== 'State'))
+    .map(([key, r]) => ({
+      key,
+      name: r.name,
+      fips: r.fips ?? null,
+      pct: r.percent_reporting ?? 0,
+      candidates: r.candidates.map(toCandidate),
+    }))
+}
+
+const ELECTION_DATE = '2026-11-03'
+
+export interface TrackedRaces {
+  races: RaceSummary[]
+  fetchedAt: number
+  stale: boolean
+}
+
+/** Senate, House and Governor races on today's ballot, from two search calls. */
+export async function trackedRaces(): Promise<TrackedRaces> {
+  const scopes = ['General', 'Statewide'] as const
+  const results = await Promise.all(
+    scopes.map((scope) =>
+      civicGet<{ races: CivicRace[] }>(
+        `/race/search?country=US&startDate=${ELECTION_DATE}&endDate=${ELECTION_DATE}&election_type=${scope}&limit=5000`,
+      ),
+    ),
+  )
+  const races: RaceSummary[] = []
+  const seen = new Set<number>()
+  for (const r of results.flatMap((res) => res.data.races)) {
+    const kind = kindOf(r.type)
+    if (!kind || seen.has(r.id) || r.province === 'US') continue
+    seen.add(r.id)
+    races.push(toSummary(r, kind))
+  }
+  return {
+    races,
+    fetchedAt: Math.min(...results.map((r) => r.fetchedAt)),
+    stale: results.some((r) => r.stale),
+  }
 }

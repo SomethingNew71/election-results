@@ -14,8 +14,8 @@
 
     <footer class="text-muted mt-12 border-t border-rule pt-6 text-xs leading-relaxed">
       <p>
-        Results data from <a href="https://civicapi.org" class="underline underline-offset-2 hover:text-ink">civicAPI</a>. Candidate
-        colours come from civicAPI. "Called" means civicAPI has marked a winner; every other status is an estimate computed in your
+        Results data from <a href="https://civicapi.org" class="underline underline-offset-2 hover:text-ink">civicAPI</a>. Colours
+        are fixed per party. "Called" means civicAPI has marked a winner; every other status is an estimate computed in your
         browser from the reported count.
       </p>
       <p class="mt-2">Map geometry: US Census Bureau via us-atlas. Page refreshes every 30 seconds while open.</p>

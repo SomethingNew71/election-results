@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { InferenceStatus } from '#shared/utils/inference'
+import { STATUS_HELP, STATUS_LABEL, STATUS_OPACITY, type InferenceStatus } from '#shared/utils/inference'
 
 defineProps<{ status: InferenceStatus; color?: string }>()
 </script>

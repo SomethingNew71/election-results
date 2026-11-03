@@ -7,30 +7,30 @@ export default defineEventHandler(async (event): Promise<RaceDetail> => {
     throw createError({ statusCode: 400, statusMessage: 'Invalid race id' })
   }
 
-  const d = await civicGet<CivicRaceDetail>(`/race/${id}`)
+  // Only proxy races on today's ballot, so arbitrary ids cannot fill the cache.
+  // In dev, past races (for example 5861, the finished 2025 VA governor race) are allowed for testing.
+  const { races } = await trackedRaces()
+  const tracked = races.find((r) => r.id === id)
+  if (!tracked && !import.meta.dev) throw createError({ statusCode: 404, statusMessage: 'Race not tracked' })
+
+  const { data: d, fetchedAt, stale } = await civicGet<CivicRaceDetail>(`/race/${id}`)
   const kind = kindOf(d.election_type)
-  if (!kind || d.province === 'US') {
-    throw createError({ statusCode: 404, statusMessage: 'Race not tracked' })
-  }
+  if (!kind) throw createError({ statusCode: 404, statusMessage: 'Race not tracked' })
+  const summary = tracked ?? { id, kind, name: d.election_name, state: d.province ?? 'US', district: d.district, pct: 0, candidates: [] }
 
   setResponseHeader(event, 'cache-control', 'public, max-age=15')
   return {
-    ...toSummary(
-      {
-        id,
-        type: d.election_type,
-        province: d.province,
-        district: d.district,
-        election_name: d.election_name,
-        election_type: d.election_scope,
-        percent_reporting: d.percent_reporting,
-        candidates: d.candidates,
-      },
-      kind,
-    ),
+    ...summary,
+    name: d.election_name,
+    pct: d.percent_reporting ?? 0,
+    candidates: d.candidates.map(toCandidate),
     pollsClose: d.polls_close,
     lastUpdated: d.last_updated,
     registeredVoters: d.registered_voters,
+    testData: Boolean(d.test_data),
+    disputed: Boolean(d.is_disputed),
+    dataAsOf: new Date(fetchedAt).toISOString(),
+    stale,
     regions: toRegions(d),
   }
 })

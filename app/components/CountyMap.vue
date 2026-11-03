@@ -93,6 +93,7 @@ const hover = ref<(typeof shapes.value.counties)[number] | null>(null)
           stroke-width="0.6"
           @mouseenter="hover = c"
           @mouseleave="hover = null"
+          @click="hover = hover?.id === c.id ? null : c"
         />
         <path :d="shapes.outline" fill="none" stroke="var(--ink)" stroke-width="1" stroke-opacity="0.5" pointer-events="none" />
       </g>

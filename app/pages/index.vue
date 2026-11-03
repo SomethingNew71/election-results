@@ -22,7 +22,11 @@ function setQuery(patch: Record<string, string | null>) {
   router.replace({ query })
 }
 
-const { data, error, secondsAgo, status } = useLive<Overview>('/api/overview', 'overview')
+const { data, error, dataAge, isOld, status } = useLive<Overview>('/api/overview', 'overview')
+const showHolders = useShowOfficeholders()
+const holderTable = computed(() =>
+  kind.value === 'senate' ? SENATE_NOT_UP : kind.value === 'governor' ? GOVERNOR_NOT_UP : null,
+)
 
 /** Only the 50 states and DC appear on the map and in the seat count. */
 const races = computed(() =>
@@ -33,7 +37,12 @@ const otherRaces = computed(() =>
 )
 const chamber = computed(() => data.value?.chambers.find((c) => c.kind === kind.value))
 
-const inferred = computed(() => races.value.map((race) => ({ race, inf: inferRace(race.candidates, race.pct) })))
+const inferred = computed(() =>
+  races.value.map((race) => ({
+    race,
+    inf: inferRace(race.candidates, race.pct, undefined, rulesFor(race.state, race.kind)),
+  })),
+)
 
 const fills = computed<Record<string, StateFill>>(() => {
   const byState = new Map<string, typeof inferred.value>()
@@ -55,24 +64,34 @@ const fills = computed<Record<string, StateFill>>(() => {
       const top = [...tally.entries()].sort((a, b) => b[1].n - a[1].n)[0]
       out[state] = top
         ? {
+            mode: 'result',
             color: top[1].color,
             opacity: 0.2 + 0.8 * (top[1].n / items.length),
-            pending: false,
             title: `${stateName(state)}: ${top[0]} leads ${top[1].n} of ${items.length} seats`,
           }
-        : { color: '', opacity: 0, pending: true, title: `${stateName(state)}: no votes yet` }
+        : { mode: 'pending', title: `${stateName(state)}: no votes yet` }
       continue
     }
     // States with two races (rare) use the stronger result.
-    const best = items.sort((a, b) => STATUS_OPACITY[b.inf.status] - STATUS_OPACITY[a.inf.status])[0]!
-    const pending = best.inf.status === 'no-votes'
-    out[state] = {
-      color: best.inf.leader?.color ?? '',
-      opacity: STATUS_OPACITY[best.inf.status],
-      pending,
-      title: pending
-        ? `${stateName(state)}: no votes yet`
-        : `${stateName(state)}: ${best.inf.leader!.name} — ${STATUS_LABEL[best.inf.status]}, ${best.race.pct}% reporting`,
+    const best = [...items].sort((a, b) => STATUS_OPACITY[b.inf.status] - STATUS_OPACITY[a.inf.status])[0]!
+    out[state] =
+      best.inf.status === 'no-votes'
+        ? { mode: 'pending', title: `${stateName(state)}: no votes yet` }
+        : {
+            mode: 'result',
+            color: best.inf.leader!.color,
+            opacity: STATUS_OPACITY[best.inf.status],
+            title: `${stateName(state)}: ${best.inf.leader!.name} — ${STATUS_LABEL[best.inf.status]}, ${best.race.pct}% reporting`,
+          }
+  }
+  if (showHolders.value && holderTable.value) {
+    for (const [state, parties] of Object.entries(holderTable.value)) {
+      if (out[state]) continue
+      out[state] = {
+        mode: 'holder',
+        colors: [...new Set(parties.map(partyColor))],
+        title: `${stateName(state)}: no race. Current ${kind.value === 'senate' ? 'senators' : 'governor'}: ${parties.join(', ')}`,
+      }
     }
   }
   return out
@@ -87,16 +106,13 @@ const selectedRaces = computed(() =>
 )
 
 const filter = ref('')
-const STATUS_RANK: Record<string, number> = {
-  competitive: 0, lean: 1, strong: 2, early: 3, decided: 4, called: 5, 'no-votes': 6,
-}
 const table = computed(() => {
   const q = filter.value.trim().toLowerCase()
   return inferred.value
     .filter(({ race }) => !q || `${race.name} ${stateName(race.state)} ${race.district ?? ''}`.toLowerCase().includes(q) ||
       race.candidates.some((c) => c.name.toLowerCase().includes(q)))
     .sort((a, b) =>
-      STATUS_RANK[a.inf.status]! - STATUS_RANK[b.inf.status]! ||
+      STATUS_RANK[a.inf.status] - STATUS_RANK[b.inf.status] ||
       (a.inf.neededShare ?? 9) - (b.inf.neededShare ?? 9) ||
       a.race.name.localeCompare(b.race.name, 'en', { numeric: true }))
 })
@@ -123,13 +139,17 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
         {{ k.label }}
       </button>
       <div class="ml-auto flex items-center gap-2 self-center text-xs">
-        <span class="live-dot" />
-        <span class="num text-muted">
+        <span v-if="!isOld" class="live-dot" />
+        <span class="num" :class="isOld ? 'font-semibold text-ink' : 'text-muted'">
           <template v-if="status === 'pending' && !data">Loading…</template>
-          <template v-else>Updated {{ secondsAgo }}s ago</template>
+          <template v-else>Data from {{ formatAge(dataAge) }}</template>
         </span>
       </div>
     </nav>
+
+    <div v-if="data?.stale" role="status" class="mt-4 rounded border border-ink bg-panel px-4 py-3 text-sm">
+      civicAPI is not responding. These results are from {{ formatAge(dataAge) }} and may be out of date.
+    </div>
 
     <div v-if="error && !data" class="mt-8 rounded border border-rule bg-panel p-6">
       <p class="font-semibold">Results are not available right now.</p>
@@ -138,7 +158,7 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
 
     <template v-else>
       <section v-if="chamber" class="mt-6 rounded-lg border border-rule bg-panel p-5">
-        <BalanceBar :chamber="chamber" :races="races" :party-colors="data?.partyColors ?? {}" />
+        <BalanceBar :chamber="chamber" :races="races" />
       </section>
 
       <section class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
@@ -150,12 +170,27 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
             <span class="kicker">{{ totalReporting }} with votes reported</span>
           </div>
           <UsMap class="mt-3" :fills="fills" :selected="selected" @select="(s) => setQuery({ state: s })" />
+          <label
+            class="mt-3 flex w-fit items-center gap-2 text-sm"
+            :class="holderTable ? 'cursor-pointer' : 'text-muted cursor-not-allowed'"
+            :title="holderTable ? '' : 'Every House seat is on the ballot'"
+          >
+            <input v-model="showHolders" type="checkbox" class="size-4 accent-[var(--ink)]" :disabled="!holderTable" />
+            Shade states with no race by current officeholders' party
+          </label>
           <div class="text-muted mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
             <span class="flex items-center gap-1.5">
-              <svg width="14" height="14"><rect width="14" height="14" fill="url(#pending-hatch)" /></svg>
+              <svg width="14" height="14" aria-hidden="true"><rect width="14" height="14" fill="url(#pending-dots)" /></svg>
               No votes yet
             </span>
-            <span class="flex items-center gap-1.5">
+            <span v-if="showHolders && holderTable" class="flex items-center gap-1.5">
+              <svg width="14" height="14" aria-hidden="true">
+                <rect width="14" height="14" fill="var(--empty)" />
+                <path d="M0 14 L14 0 M-4 6 L6 -4 M8 18 L18 8" :stroke="partyColor(LEFT_PARTY)" stroke-width="3" stroke-opacity="0.55" />
+              </svg>
+              Striped = no race, shaded by current officeholders (not a result)
+            </span>
+            <span v-else class="flex items-center gap-1.5">
               <span class="inline-block size-3.5 rounded-sm bg-empty" />
               No race
             </span>
@@ -190,7 +225,7 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
               full vote-count inference.
             </p>
             <dl class="mt-5 space-y-3 text-sm">
-              <div v-for="s in (['competitive', 'lean', 'strong', 'decided', 'called'] as const)" :key="s">
+              <div v-for="s in (['competitive', 'lean', 'strong', 'decided', 'close', 'runoff', 'rcv', 'called'] as const)" :key="s">
                 <dt><StatusTag :status="s" /></dt>
                 <dd class="text-muted mt-1">{{ STATUS_HELP[s] }}</dd>
               </div>

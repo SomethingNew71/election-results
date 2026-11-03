@@ -3,6 +3,7 @@ export type RaceKind = 'senate' | 'governor' | 'house'
 export interface Candidate {
   name: string
   party: string
+  /** Party colour (see shared/utils/parties.ts), not civicAPI's per-candidate colour. */
   color: string
   votes: number
   winner: boolean
@@ -28,11 +29,16 @@ export interface ChamberTotals {
   totalSeats: number
 }
 
-export interface Overview {
-  updatedAt: string
+export interface Freshness {
+  /** When the server last got this data from civicAPI. */
+  dataAsOf: string
+  /** True when civicAPI failed and an older copy is shown. */
+  stale: boolean
+}
+
+export interface Overview extends Freshness {
   races: RaceSummary[]
   chambers: ChamberTotals[]
-  partyColors: Record<string, string>
 }
 
 export interface RegionResult {
@@ -43,9 +49,11 @@ export interface RegionResult {
   candidates: Candidate[]
 }
 
-export interface RaceDetail extends RaceSummary {
+export interface RaceDetail extends RaceSummary, Freshness {
   pollsClose: string | null
   lastUpdated: string | null
   registeredVoters: number | null
+  testData: boolean
+  disputed: boolean
   regions: RegionResult[]
 }

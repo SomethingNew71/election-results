@@ -3,9 +3,13 @@ import type { RaceDetail } from '#shared/types'
 
 const route = useRoute()
 const id = computed(() => String(route.params.id))
-const { data, error, secondsAgo } = useLive<RaceDetail>(() => `/api/race/${id.value}`, () => `race-${id.value}`)
+const { data, error, dataAge, isOld } = useLive<RaceDetail>(() => `/api/race/${id.value}`, () => `race-${id.value}`)
 
-const inf = computed(() => (data.value ? inferRace(data.value.candidates, data.value.pct, data.value.regions) : null))
+const inf = computed(() =>
+  data.value && !data.value.testData
+    ? inferRace(data.value.candidates, data.value.pct, data.value.regions, rulesFor(data.value.state, data.value.kind))
+    : null,
+)
 const stateFips = computed(() => (data.value ? STATE_BY_POSTAL.get(data.value.state)?.fips : undefined))
 const showCountyMap = computed(() => Boolean(stateFips.value && data.value?.regions.length && data.value.kind !== 'house'))
 
@@ -42,6 +46,11 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
       <p class="text-muted mt-1 text-sm">{{ error.statusMessage ?? 'civicAPI did not respond.' }}</p>
     </div>
 
+    <div v-else-if="data?.testData" role="status" class="mt-6 rounded border border-ink bg-panel p-6">
+      <p class="font-semibold">civicAPI marks this race as TEST DATA.</p>
+      <p class="text-muted mt-1 text-sm">The numbers are not real results, so they are hidden. This page refreshes every 30 seconds.</p>
+    </div>
+
     <template v-else-if="data && inf">
       <header class="mt-3 flex flex-wrap items-end justify-between gap-4 border-b border-rule pb-4">
         <div>
@@ -49,10 +58,17 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
           <h1 class="font-display mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">{{ data.name }}</h1>
         </div>
         <div class="flex items-center gap-2 text-xs">
-          <span class="live-dot" />
-          <span class="num text-muted">Updated {{ secondsAgo }}s ago</span>
+          <span v-if="!isOld" class="live-dot" />
+          <span class="num" :class="isOld ? 'font-semibold text-ink' : 'text-muted'">Data from {{ formatAge(dataAge) }}</span>
         </div>
       </header>
+
+      <div v-if="data.stale" role="status" class="mt-4 rounded border border-ink bg-panel px-4 py-3 text-sm">
+        civicAPI is not responding. These results are from {{ formatAge(dataAge) }} and may be out of date.
+      </div>
+      <div v-if="data.disputed" role="status" class="mt-4 rounded border border-ink bg-panel px-4 py-3 text-sm">
+        civicAPI marks this result as disputed.
+      </div>
 
       <div class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
         <section class="rounded-lg border border-rule bg-panel p-5">
@@ -118,7 +134,7 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
                 </ul>
                 <p v-if="inf.projectionFlips" class="mt-3 rounded border border-rule bg-paper p-2 text-xs">
                   The projection puts {{ inf.projected[0]!.name }} ahead. The uncounted vote is in areas that favour a different candidate
-                  than the current leader.
+                  than the current leader. The status above uses the statewide count only.
                 </p>
               </div>
             </template>
