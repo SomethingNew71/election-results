@@ -44,7 +44,7 @@ function hasDuplicateKeys(names: string[]): boolean {
 export function mergeFeed(
   race: RaceSummary,
   feed: FeedRace,
-  meta: { source: string; sourceUrl: string; fetchedAt: string; version: string | null },
+  meta: { source: string; sourceUrl: string; fetchedAt: string; checkedAt: string; version: string | null },
 ): RaceSummary {
   const feedByKey = new Map<string, number>()
   let feedWriteIns = 0

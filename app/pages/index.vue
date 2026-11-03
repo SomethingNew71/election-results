@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { Overview, RaceKind, RaceSummary } from '#shared/types'
 import type { StateFill } from '~/components/UsMap.vue'
+import { POLL_CLOSINGS, pollsHaveClosed } from '#shared/utils/pollClosings'
+import { CHANGE_MARK_MS } from '~/composables/useRaceChanges'
 
 const route = useRoute()
 const router = useRouter()
@@ -44,6 +46,30 @@ const inferred = computed(() =>
   })),
 )
 
+/** Every race on the ballot, for the change log (it covers all three tabs). */
+const allInferred = computed(() =>
+  (data.value?.races ?? []).map((race) => ({
+    race,
+    inf: inferRace(race.candidates, race.pct, undefined, rulesFor(race.state, race.kind)),
+  })),
+)
+const { events, changedAt } = useRaceChanges(allInferred)
+const now = useClock()
+const isChanged = (id: number) => now.value - (changedAt.value[id] ?? 0) < CHANGE_MARK_MS
+
+/** Oldest state-feed check among races that use one. */
+const feedAge = computed(() => {
+  const checks = (data.value?.races ?? []).map((r) => r.crossCheck?.checkedAt).filter((t): t is string => Boolean(t))
+  return checks.length ? ageOf(checks.sort()[0], now.value) : null
+})
+
+function closingNote(state: string) {
+  const t = POLL_CLOSINGS[state]
+  if (!t || pollsHaveClosed(state, now.value)) return 'no votes yet'
+  const time = new Date(t.first).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
+  return `polls close ${time} ET`
+}
+
 const fills = computed<Record<string, StateFill>>(() => {
   const byState = new Map<string, typeof inferred.value>()
   for (const item of inferred.value) {
@@ -69,14 +95,14 @@ const fills = computed<Record<string, StateFill>>(() => {
             opacity: 0.2 + 0.8 * (top[1].n / items.length),
             title: `${stateName(state)}: ${top[0]} leads ${top[1].n} of ${items.length} seats`,
           }
-        : { mode: 'pending', title: `${stateName(state)}: no votes yet` }
+        : { mode: 'pending', title: `${stateName(state)}: ${closingNote(state)}` }
       continue
     }
     // States with two races (rare) use the stronger result.
     const best = [...items].sort((a, b) => STATUS_OPACITY[b.inf.status] - STATUS_OPACITY[a.inf.status])[0]!
     out[state] =
       best.inf.status === 'no-votes'
-        ? { mode: 'pending', title: `${stateName(state)}: no votes yet` }
+        ? { mode: 'pending', title: `${stateName(state)}: ${closingNote(state)}` }
         : {
             mode: 'result',
             color: best.inf.leader!.color,
@@ -143,6 +169,7 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
         <span class="num" :class="isOld ? 'font-semibold text-ink' : 'text-muted'">
           <template v-if="status === 'pending' && !data">Loading…</template>
           <template v-else>Data from {{ formatAge(dataAge) }}</template>
+          <template v-if="feedAge !== null"> · state feeds checked {{ formatAge(feedAge) }}</template>
         </span>
       </div>
     </nav>
@@ -157,6 +184,8 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
     </div>
 
     <template v-else>
+      <ClientOnly><NextClosings class="mt-4" /></ClientOnly>
+
       <section v-if="chamber" class="mt-6 rounded-lg border border-rule bg-panel p-5">
         <BalanceBar :chamber="chamber" :races="races" />
       </section>
@@ -199,6 +228,7 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
           </div>
         </div>
 
+        <div class="space-y-6">
         <aside class="rounded-lg border border-rule bg-panel p-5">
           <template v-if="selected && selectedRaces.length">
             <div class="flex items-start justify-between gap-2">
@@ -232,6 +262,8 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
             </dl>
           </template>
         </aside>
+        <RecentChanges :events="events" />
+        </div>
       </section>
 
       <section class="mt-6 rounded-lg border border-rule bg-panel p-5">
@@ -260,10 +292,12 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
               <tr
                 v-for="{ race, inf } in showAll ? table : table.slice(0, 25)"
                 :key="race.id"
-                class="border-b border-rule/60 last:border-0"
+                class="border-b border-rule/60 transition-colors last:border-0"
+                :class="isChanged(race.id) ? 'bg-paper' : ''"
               >
                 <td class="py-2 pr-3">
                   <NuxtLink :to="`/race/${race.id}`" class="font-medium underline-offset-4 hover:underline">{{ label(race) }}</NuxtLink>
+                  <span v-if="isChanged(race.id)" class="kicker ml-2 rounded border border-ink px-1 !text-ink">Changed</span>
                 </td>
                 <td class="py-2 pr-3">
                   <span v-if="inf.leader && inf.counted" class="flex items-center gap-1.5">

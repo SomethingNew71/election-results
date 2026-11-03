@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { RaceDetail } from '#shared/types'
+import { POLL_CLOSINGS } from '#shared/utils/pollClosings'
 
 const route = useRoute()
 const id = computed(() => String(route.params.id))
@@ -20,10 +21,12 @@ const regionRows = computed(() =>
 )
 const showAllRegions = ref(false)
 
+// civicAPI's polls_close is wrong for several states; use the reviewed table.
 const pollsClose = computed(() => {
-  const t = data.value?.pollsClose
+  const t = data.value ? POLL_CLOSINGS[data.value.state] : undefined
   if (!t) return null
-  return new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+  const fmt = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
+  return t.first === t.last ? `${fmt(t.first)} ET` : `${fmt(t.first)}–${fmt(t.last)} ET`
 })
 
 const kindLabel = computed(() => ({ senate: 'US Senate', governor: 'Governor', house: 'US House' })[data.value?.kind ?? 'senate'])

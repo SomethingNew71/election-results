@@ -37,7 +37,10 @@ export interface FeedRace {
 export interface CrossCheck {
   source: string
   sourceUrl: string
+  /** When the shown version was downloaded. */
   fetchedAt: string
+  /** When the feed was last checked for a new version. */
+  checkedAt: string
   /** The feed's own version stamp, when it has one. */
   version: string | null
   feedTotal: number

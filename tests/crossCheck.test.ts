@@ -3,7 +3,7 @@ import { mergeFeed, personKey } from '../shared/utils/crossCheck'
 import { contestKind, parseClarity } from '../server/utils/stateFeeds'
 import type { Candidate, FeedRace, RaceSummary } from '../shared/types'
 
-const meta = { source: 'Iowa Secretary of State', sourceUrl: 'https://x/', fetchedAt: '2026-11-03T00:00:00Z', version: '1' }
+const meta = { source: 'Iowa Secretary of State', sourceUrl: 'https://x/', fetchedAt: '2026-11-03T00:00:00Z', checkedAt: '2026-11-03T00:00:00Z', version: '1' }
 
 const cand = (name: string, votes: number): Candidate => ({ name, party: 'P', color: '#888', votes, winner: false })
 
