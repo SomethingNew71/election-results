@@ -4,12 +4,19 @@ import { feature } from 'topojson-client'
 import type { Topology, GeometryCollection } from 'topojson-specification'
 import type { Feature, FeatureCollection, Geometry } from 'geojson'
 import type { RegionResult } from '#shared/types'
+import { formatShift } from '#shared/utils/baseline'
 
 const props = defineProps<{
   /** Two-digit state FIPS. */
   stateFips: string
   regions: RegionResult[]
+  /** 'shift' shades by the margin change from 2024 (see shared/utils/baseline.ts). */
+  mode?: 'leader' | 'shift'
+  shiftOf?: (region: RegionResult) => number | null
 }>()
+
+/** Shift shading reaches full strength at this many points. */
+const SHIFT_FULL = 0.2
 
 type CountiesTopo = Topology<{ counties: GeometryCollection; states: GeometryCollection }>
 const topo = shallowRef<CountiesTopo | null>(null)
@@ -70,7 +77,14 @@ const shapes = computed(() => {
       const leader = inf?.leader && inf.counted > 0 ? inf.leader : null
       // Shade by margin so lopsided counties read darker than close ones.
       const opacity = leader ? 0.25 + Math.min(inf!.marginShare, 0.5) * 1.5 : 0
-      return { id: String(f.id), name: f.properties.name, d: path(f) ?? '', region, leader, inf, opacity }
+      const shift = region && props.shiftOf ? props.shiftOf(region) : null
+      let fill = leader ? leader.color : 'var(--empty)'
+      let fillOpacity = leader ? opacity : 1
+      if (props.mode === 'shift') {
+        fill = shift === null ? 'var(--empty)' : partyColor(shift > 0 ? LEFT_PARTY : RIGHT_PARTY)
+        fillOpacity = shift === null ? 1 : 0.15 + (Math.min(Math.abs(shift), SHIFT_FULL) / SHIFT_FULL) * 0.8
+      }
+      return { id: String(f.id), name: f.properties.name, d: path(f) ?? '', region, leader, inf, fill, fillOpacity, shift }
     }),
   }
 })
@@ -87,8 +101,8 @@ const hover = ref<(typeof shapes.value.counties)[number] | null>(null)
           v-for="c in shapes.counties"
           :key="c.id"
           :d="c.d"
-          :fill="c.leader ? c.leader.color : 'var(--empty)'"
-          :fill-opacity="c.leader ? c.opacity : 1"
+          :fill="c.fill"
+          :fill-opacity="c.fillOpacity"
           stroke="var(--map-line)"
           stroke-width="0.5"
           @mouseenter="hover = c"
@@ -104,7 +118,8 @@ const hover = ref<(typeof shapes.value.counties)[number] | null>(null)
     >
       <div class="font-semibold">{{ hover.region?.name ?? hover.name }}</div>
       <template v-if="hover.region && hover.inf">
-        <div class="kicker mt-0.5">{{ hover.region.pct }}% reporting</div>
+        <div class="kicker mt-0.5">{{ Math.round(hover.region.pct) }}% reporting</div>
+        <div v-if="hover.shift !== null" class="kicker mt-0.5">vs 2024 president: {{ formatShift(hover.shift) }}</div>
         <div
           v-for="c in sortByVotes(hover.region.candidates).slice(0, 3)"
           :key="c.name"

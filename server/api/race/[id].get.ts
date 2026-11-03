@@ -30,7 +30,10 @@ export default defineEventHandler(async (event): Promise<RaceDetail | Response> 
   const merged = applyFeeds(tracked ? races.map((r) => (r.id === id ? base : r)) : [base], feeds).find((r) => r.id === id)
 
   const feed = merged ? feeds.get(feedKey(merged))?.race : undefined
-  const stateRegions = merged && feed ? feedRegions(merged, feed) : null
+  const civicRegions = toRegions(d)
+  // State feeds name counties without FIPS; borrow civicAPI's by name for the 2024 baseline.
+  const fipsByName = new Map(civicRegions.filter((r) => r.fips).map((r) => [countyKey(r.name), r.fips]))
+  const stateRegions = merged && feed ? feedRegions(merged, feed)?.map((r) => ({ ...r, fips: fipsByName.get(countyKey(r.name)) ?? null })) : null
 
   setResponseHeader(event, 'cache-control', 'public, max-age=15')
   return {
@@ -42,7 +45,11 @@ export default defineEventHandler(async (event): Promise<RaceDetail | Response> 
     disputed: Boolean(d.is_disputed),
     dataAsOf: new Date(fetchedAt).toISOString(),
     stale,
-    regions: stateRegions ?? toRegions(d),
+    regions: stateRegions ?? civicRegions,
     regionSource: stateRegions ? 'state' : 'civicapi',
   }
 })
+
+function countyKey(name: string): string {
+  return name.toLowerCase().replace(/\bst\.?\s/g, 'saint ').replace(/\bcounty\b/g, '').replace(/[^a-z]/g, '')
+}

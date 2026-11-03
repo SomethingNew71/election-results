@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import type { RaceDetail } from '#shared/types'
+import type { RaceDetail, RegionResult } from '#shared/types'
 import { POLL_CLOSINGS } from '#shared/utils/pollClosings'
+import { formatShift, shiftVs2024, turnoutEstimate, type Baseline } from '#shared/utils/baseline'
 
 const route = useRoute()
 const id = computed(() => String(route.params.id))
@@ -14,9 +15,28 @@ const inf = computed(() =>
 const stateFips = computed(() => (data.value ? STATE_BY_POSTAL.get(data.value.state)?.fips : undefined))
 const showCountyMap = computed(() => Boolean(stateFips.value && data.value?.regions.length && data.value.kind !== 'house'))
 
+// 2024 county baseline for the turnout model and the shift column (statewide races only).
+const baseline = shallowRef<Baseline | null>(null)
+onMounted(async () => {
+  try {
+    baseline.value = await loadGeo<Baseline>('/data/county-2024.json')
+  } catch {
+    // The page works without it.
+  }
+})
+const statewide = computed(() => data.value?.kind !== 'house')
+const turnout = computed(() =>
+  baseline.value && statewide.value && data.value && stateFips.value && !data.value.testData
+    ? turnoutEstimate(data.value.candidates, data.value.regions, baseline.value, stateFips.value)
+    : null,
+)
+const shiftOf = (r: RegionResult) => (baseline.value && statewide.value ? shiftVs2024(r, baseline.value) : null)
+const hasShift = computed(() => (data.value?.regions ?? []).some((r) => shiftOf(r) !== null))
+const mapMode = ref<'leader' | 'shift'>('leader')
+
 const regionRows = computed(() =>
   (data.value?.regions ?? [])
-    .map((r) => ({ region: r, inf: inferRace(r.candidates, r.pct) }))
+    .map((r) => ({ region: r, inf: inferRace(r.candidates, r.pct), shift: shiftOf(r) }))
     .sort((a, b) => b.inf.counted - a.inf.counted || a.region.name.localeCompare(b.region.name)),
 )
 const showAllRegions = ref(false)
@@ -86,13 +106,32 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
           <CandidateRows class="mt-5" :candidates="data.candidates" :limit="12" />
 
           <div v-if="showCountyMap" class="mt-8">
-            <h2 class="font-display text-lg font-semibold tracking-tight">By county</h2>
-            <p class="text-muted text-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h2 class="font-display text-lg font-semibold tracking-tight">By county</h2>
+              <div v-if="hasShift" class="flex rounded border border-rule text-xs" role="group" aria-label="Map shading">
+                <button
+                  v-for="m in ([['leader', 'Leader'], ['shift', 'Shift vs 2024']] as const)"
+                  :key="m[0]"
+                  type="button"
+                  class="px-2.5 py-1"
+                  :class="mapMode === m[0] ? 'bg-ink text-paper' : 'text-muted hover:text-ink'"
+                  :aria-pressed="mapMode === m[0]"
+                  @click="mapMode = m[0]"
+                >
+                  {{ m[1] }}
+                </button>
+              </div>
+            </div>
+            <p v-if="mapMode === 'shift'" class="text-muted text-xs">
+              Colour shows which way the Democratic-minus-Republican margin moved from the 2024 presidential race in that county. Darker = larger
+              move (full at 20 points). Grey = no comparison. This compares different races and candidates; it is not a forecast.
+            </p>
+            <p v-else class="text-muted text-xs">
               Colour shows the county leader. Darker = wider county margin. Grey = no votes.<template v-if="data.regionSource === 'state'">
                 County figures are from the {{ data.crossCheck?.source }}. A county's % is its share of precincts fully reported.</template
               ><template v-else-if="data.crossCheck?.used"> County figures are from civicAPI.</template>
             </p>
-            <CountyMap class="mt-3" :state-fips="stateFips!" :regions="data.regions" />
+            <CountyMap class="mt-3" :state-fips="stateFips!" :regions="data.regions" :mode="mapMode" :shift-of="shiftOf" />
           </div>
         </section>
 
@@ -124,6 +163,27 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
                   <dd class="text-muted mt-1 text-xs">of the remaining votes between the top two candidates.</dd>
                 </div>
               </dl>
+
+              <div v-if="turnout && inf.status !== 'called'" class="mt-5 border-t border-rule pt-4">
+                <h3 class="kicker">Second estimate: 2024 turnout</h3>
+                <dl class="mt-2 space-y-2 text-sm">
+                  <div class="flex justify-between gap-4">
+                    <dt class="text-muted">Est. votes left to count</dt>
+                    <dd class="num font-semibold">{{ formatNumber(turnout.estRemaining) }}</dd>
+                  </div>
+                  <div v-if="inf.runnerUp && turnout.neededShare !== null" class="flex justify-between gap-4">
+                    <dt class="text-muted">{{ inf.runnerUp.name }} would need</dt>
+                    <dd class="num font-semibold">
+                      {{ turnout.neededShare > 1 ? 'More than remains' : formatShare(turnout.neededShare) }}
+                    </dd>
+                  </div>
+                </dl>
+                <p class="text-muted mt-2 text-xs">
+                  Each county is expected to cast its 2024 presidential vote × {{ formatShare(turnout.ratio, 0) }}, the turnout seen in the
+                  {{ turnout.completeCounties }} counties that have finished counting. Counties that finish first are often small, so this can
+                  be off. It does not change the status above.
+                </p>
+              </div>
 
               <div v-if="inf.estRemaining" class="mt-5 border-t border-rule pt-4">
                 <h3 class="kicker">If the rest votes like what is counted</h3>
@@ -160,12 +220,13 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
                   <th class="py-1.5 font-normal">Area</th>
                   <th class="py-1.5 font-normal">Leader</th>
                   <th class="py-1.5 text-right font-normal">Margin</th>
+                  <th v-if="hasShift" class="py-1.5 text-right font-normal" title="Margin change from the 2024 presidential race">vs 2024</th>
                   <th class="py-1.5 text-right font-normal">Rep.</th>
                 </tr>
               </thead>
               <tbody>
                 <tr
-                  v-for="{ region, inf: r } in showAllRegions ? regionRows : regionRows.slice(0, 15)"
+                  v-for="{ region, inf: r, shift } in showAllRegions ? regionRows : regionRows.slice(0, 15)"
                   :key="region.key"
                   class="border-b border-rule/60 last:border-0"
                 >
@@ -176,7 +237,8 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
                     <span v-else class="text-muted">–</span>
                   </td>
                   <td class="num py-1.5 text-right">{{ r.counted ? formatShare(r.marginShare, 0) : '–' }}</td>
-                  <td class="num py-1.5 text-right">{{ region.pct }}%</td>
+                  <td v-if="hasShift" class="num py-1.5 text-right">{{ shift === null ? '–' : formatShift(shift) }}</td>
+                  <td class="num py-1.5 text-right">{{ Math.round(region.pct) }}%</td>
                 </tr>
               </tbody>
             </table>
