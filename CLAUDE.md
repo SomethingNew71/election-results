@@ -14,7 +14,14 @@ Live 2026 US election results on Cloudflare Workers (`election-results.classicmi
 - **`/api/race/:id` proxies only races on today's ballot** (so arbitrary ids cannot fill the isolate cache). In dev, past races are allowed — `5861` is the finished 2025 VA governor race, useful for testing with real numbers.
 - **Stale data is labelled.** `civicGet` serves an older copy for up to 10 minutes when civicAPI fails, with `stale: true`; the UI shows the data's age from `dataAsOf`, not the poll time.
 
-- **State feeds are a cross-check, never averaged.** `server/utils/stateFeeds.ts` reads Clarity ENR (CO 127407, IA 127077 — the only states with a statewide 2026 general there). `mergeFeed` (`shared/utils/crossCheck.ts`) swaps in the state's counts only when candidates match by last name and the state has counted more votes; reporting % is then scaled and marked `~`. County data stays civicAPI. A failing feed is skipped silently.
+- **State feeds are a cross-check, never averaged.** Adapters: Clarity ENR in `server/utils/stateFeeds.ts` (CO 127407, IA 127077), the rest in `server/feeds/` (OH liveresults, AR + MO Tally ENR, VA Enhanced Voting `/data`, DE Socrata). `mergeFeed` (`shared/utils/crossCheck.ts`) swaps in the state's counts only when candidates match by last name and the state has counted more votes. Reporting % always stays civicAPI's (a feed's units are counties/precincts/localities, not vote share). A failing feed is skipped and retried after 60 s.
+- **Feed versions never go backwards.** Each adapter returns a version (Clarity `current_ver`, Tally `versionID`, VA `asOf`); OH and DE have none, so total votes stand in. A load whose version is not higher is ignored.
+- **County data follows the counts.** When a race shows the state's counts and the feed has a county breakdown (Clarity `json/details.json`, Tally `locations`), the race page uses the state's counties (`regionSource: 'state'`), with names/FIPS filled in from civicAPI. A state county's % is precincts fully reported.
+- **One shared snapshot.** Nitro preset `cloudflare_durable`: `/api/*` forwards to one Durable Object running the same app (`server/utils/snapshot.ts`), so upstream caches are shared and an alarm refreshes every 15 s while people read. SSR has no cloudflare context; `viaSnapshot` uses `globalThis.__env__.$DurableObject`. If the object is unreachable, the isolate answers itself.
+- **Poll-closing times come from `shared/utils/pollClosings.ts`, never civicAPI's `polls_close`** (wrong for DE, CO, NV, WA, HI on 2026-11-03).
+- **2024 baseline is a second opinion only.** `shared/utils/baseline.ts` (data `public/data/county-2024.json`, built by `scripts/build-county-2024.ts`) gives a turnout-based votes-left estimate and a county shift vs the 2024 presidential margin. Neither changes a status. Statewide races only.
+- **Archive mode.** `bun scripts/archive.ts` then `ARCHIVE=1 bun run deploy`: pages read `public/archive/*.json` in the browser and stop polling. A plain `bun run deploy` is always the live site.
+- **Runoffs and certification.** `RUNOFF_DATES` in `shared/utils/rules.ts` (GA 1 Dec all races, LA 12 Dec House only — LA House was an open primary on 3 Nov after the 2026 redistricting). `shared/utils/certification.ts` is edited by hand as states certify.
 - **Map contrast.** `--map-line` outlines every state and county at ≥3:1 against `--panel` (WCAG 1.4.11). Hawaii has a bounding-box hit area; small states also get buttons under the map.
 
 ## Gotchas
@@ -25,3 +32,5 @@ Live 2026 US election results on Cloudflare Workers (`election-results.classicmi
 - `bun run build` while `nuxt dev` runs corrupts the dev server's auto-imports; restart dev after a build.
 - `vue-tsc` does not run against the installed TypeScript version; `nuxt typecheck` fails. Rely on `bun run build`, `bun run test` and a browser check.
 - civicAPI attribution is required (footer link).
+- Tally ENR spells the write-in list `writeInChoices` on contests and `writeinChoices` on locations.
+- Election night: `bun scripts/watch.ts` checks data age and every state feed; exit 1 means look.
