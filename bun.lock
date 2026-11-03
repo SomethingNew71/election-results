@@ -17,6 +17,7 @@
         "@types/topojson-specification": "^1.0.5",
         "tailwindcss": "^4.3.4",
         "typescript": "^7.0.2",
+        "unimport": "7.0.2",
         "vitest": "^5.1.0",
         "vue-tsc": "^3.3.14",
         "wrangler": "^4.157.0",

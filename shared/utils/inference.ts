@@ -50,7 +50,10 @@ export const MIN_REGION_PCT = 5
 /** A lead under this share of the vote is never shown as out of reach. */
 export const CLOSE_MARGIN = 0.005
 
-export const NO_RULES: ElectionRules = { majority: false, rcv: false }
+export const NO_RULES: ElectionRules = {
+  majority: false,
+  rcv: false,
+}
 
 export const STATUS_LABEL: Record<InferenceStatus, string> = {
   'no-votes': 'No votes yet',
