@@ -29,15 +29,19 @@ export interface FeedRace {
   kind: RaceKind
   district: string | null
   candidates: { name: string; votes: number }[]
-  /** Reporting units (counties) with results, and the total. */
+  /** Reporting units with results, and the total; 0 of 0 when the feed gives none. */
   unitsReporting: number
   unitsTotal: number
+  /** What a unit is in this feed: "counties", "precincts", "localities". */
+  unitLabel: string
   /** County breakdown; `votes` follows the order of `candidates`. */
   regions?: FeedRegion[]
 }
 
 export interface FeedRegion {
   name: string
+  /** 5-digit county FIPS when the feed gives one. */
+  fips?: string
   precinctsReporting: number
   precinctsTotal: number
   votes: number[]
@@ -56,6 +60,7 @@ export interface CrossCheck {
   civicTotal: number
   unitsReporting: number
   unitsTotal: number
+  unitLabel: string
   /** Every civicAPI candidate was found in the feed. */
   matched: boolean
   /** The feed's counts are the ones shown. */

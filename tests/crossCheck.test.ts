@@ -24,6 +24,7 @@ const feed = (candidates: { name: string; votes: number }[], unitsReporting = 50
   candidates,
   unitsReporting,
   unitsTotal: 99,
+  unitLabel: 'counties',
 })
 
 describe('personKey', () => {
@@ -177,6 +178,7 @@ describe('Clarity contests', () => {
         ],
         unitsReporting: 2,
         unitsTotal: 99,
+        unitLabel: 'counties',
       },
     ])
   })
