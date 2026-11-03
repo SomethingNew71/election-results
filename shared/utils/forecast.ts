@@ -34,4 +34,8 @@ export function ratingRank(rating: string): number {
 }
 
 /** Seats in each chamber, for checking civicAPI's published totals. */
-export const CHAMBER_SEATS = { senate: 100, house: 435, governor: 50 } as const
+export const CHAMBER_SEATS = {
+  senate: 100,
+  house: 435,
+  governor: 50,
+} as const

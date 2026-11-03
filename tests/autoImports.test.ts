@@ -1,22 +1,17 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { scanExports } from 'unimport'
 import { describe, expect, it } from 'vitest'
 
-function sourceFiles(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-    const path = join(dir, e.name)
-    if (e.isDirectory()) return sourceFiles(path)
-    return /\.(vue|ts)$/.test(e.name) ? [path] : []
-  })
-}
+const DIRS = ['shared/utils', 'app/composables']
 
 describe('auto-imports', () => {
-  // Nuxt's export scan misses STATUS_LABEL, so it is undefined unless imported by name.
-  it('imports STATUS_LABEL by name wherever it is used', () => {
-    const missing = sourceFiles('app').filter((path) => {
-      const src = readFileSync(path, 'utf8')
-      return /\bSTATUS_LABEL\b/.test(src) && !/import \{[^}]*\bSTATUS_LABEL\b[^}]*\} from/.test(src)
-    })
-    expect(missing).toEqual([])
+  const files = DIRS.flatMap((dir) => readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => join(dir, f)))
+
+  // Nuxt's scan can lose an export after a one-line object literal; see CLAUDE.md.
+  it.each(files)('scans every export of %s', async (path) => {
+    const declared = [...readFileSync(path, 'utf8').matchAll(/^export (?:async )?(?:const|function|class) (\w+)/gm)].map((m) => m[1])
+    const scanned = (await scanExports(path, false)).map((i) => i.name)
+    expect(scanned.sort()).toEqual(declared.sort())
   })
 })
