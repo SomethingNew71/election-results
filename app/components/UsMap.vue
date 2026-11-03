@@ -110,7 +110,7 @@ const hovered = ref<string | null>(null)
           :fill="fillFor(s.postal).fill"
           :fill-opacity="fillFor(s.postal).opacity"
           :class="isSelectable(s.postal) ? 'cursor-pointer outline-none' : 'outline-none'"
-          :tabindex="isSelectable(s.postal) ? 0 : undefined"
+          :tabindex="isSelectable(s.postal) ? (SMALL_STATES.includes(s.postal) ? -1 : 0) : undefined"
           :role="isSelectable(s.postal) ? 'button' : undefined"
           :aria-label="labelFor(s.postal)"
           :aria-pressed="isSelectable(s.postal) ? selected === s.postal : undefined"
@@ -137,7 +137,9 @@ const hovered = ref<string | null>(null)
             @mouseenter="hovered = s.postal"
             @mouseleave="hovered = null"
             @click="select(s.postal)"
-          />
+          >
+            <title>{{ labelFor(s.postal) }}</title>
+          </rect>
         </template>
         <template v-for="s in shapes" :key="`sel-${s.postal}`">
           <path
@@ -151,7 +153,7 @@ const hovered = ref<string | null>(null)
         </template>
       </g>
     </svg>
-    <div class="mt-2 flex flex-wrap gap-1.5" aria-label="Small states">
+    <div class="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Small states">
       <button
         v-for="postal in SMALL_STATES"
         :key="postal"

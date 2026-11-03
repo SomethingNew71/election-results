@@ -21,8 +21,8 @@ const rows = computed(() => [...props.check.differences].sort((a, b) => Math.max
         for comparison.
       </template>
       <template v-else-if="check.used">
-        The state has counted {{ formatNumber(gap) }} more votes than civicAPI, so the counts above are the state's. Reporting % is
-        scaled from civicAPI's estimate (marked ~).
+        The state has counted {{ formatNumber(gap) }} more votes than civicAPI, so the counts above are the state's. Reporting % stays
+        civicAPI's estimate, so the votes left may be overstated.
       </template>
       <template v-else-if="gap === 0 && check.feedTotal > 0">Both sources show the same total.</template>
       <template v-else-if="check.feedTotal === 0 && check.civicTotal === 0">Neither source has votes yet.</template>

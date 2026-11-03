@@ -16,19 +16,30 @@ export function personKey(name: string): string {
   return words.at(-1) ?? ''
 }
 
-function isWriteIn(name: string): boolean {
+export function isWriteIn(name: string): boolean {
   return /write[\s-]?in/i.test(name)
 }
 
-/** Unmatched feed candidates may hold at most this share of the feed total. */
+/** Unmatched candidates on either side may hold at most this share of that side's total. */
 const UNMATCHED_LIMIT = 0.01
 
+function hasDuplicateKeys(names: string[]): boolean {
+  const keys = names.filter((n) => !isWriteIn(n)).map(personKey)
+  return new Set(keys).size !== keys.length
+}
+
 /**
- * Cross-check a civicAPI race against an official state feed. Counts never
- * get averaged: both sources read the same official tally, so when the
- * candidate lists match and the state feed has counted more votes, its
+ * Cross-check a civicAPI race against an official state feed. Counts are
+ * never averaged: both sources read the same official tally, so when the
+ * candidate lists match and the state has counted more votes, the state's
  * numbers replace civicAPI's. Otherwise civicAPI stays and the feed is shown
  * for comparison only.
+ *
+ * Reporting % always stays civicAPI's. A state's "units reporting" counts
+ * counties with any result, not the share of votes counted, and scaling the
+ * percentage would make leads look safer than they are. Keeping civicAPI's
+ * lower figure with the state's higher count overestimates the votes left,
+ * which errs toward "Competitive", never toward "Out of reach".
  */
 export function mergeFeed(
   race: RaceSummary,
@@ -36,10 +47,10 @@ export function mergeFeed(
   meta: { source: string; sourceUrl: string; fetchedAt: string; version: string | null },
 ): RaceSummary {
   const feedByKey = new Map<string, number>()
+  let feedWriteIns = 0
   for (const c of feed.candidates) {
-    if (isWriteIn(c.name)) continue
-    const key = personKey(c.name)
-    feedByKey.set(key, (feedByKey.get(key) ?? 0) + c.votes)
+    if (isWriteIn(c.name)) feedWriteIns += c.votes
+    else feedByKey.set(personKey(c.name), c.votes)
   }
   const feedTotal = feed.candidates.reduce((n, c) => n + c.votes, 0)
   const civicTotal = race.candidates.reduce((n, c) => n + c.votes, 0)
@@ -47,11 +58,11 @@ export function mergeFeed(
   const used = new Set<string>()
   const differences: CrossCheck['differences'] = []
   // civicAPI lists registered write-in candidates that state feeds often omit.
-  // Those may go unmatched while they stay minor; they keep civicAPI's count.
+  // Those may go unmatched while they stay minor.
   let unmatchedCivicVotes = 0
   for (const c of race.candidates) {
-    const key = personKey(c.name)
     if (isWriteIn(c.name)) continue
+    const key = personKey(c.name)
     if (!feedByKey.has(key)) {
       unmatchedCivicVotes += c.votes
       continue
@@ -59,17 +70,17 @@ export function mergeFeed(
     used.add(key)
     differences.push({ name: c.name, civic: c.votes, feed: feedByKey.get(key)! })
   }
-  const unmatchedFeedVotes = feed.candidates
-    .filter((c) => !isWriteIn(c.name) && !used.has(personKey(c.name)))
-    .reduce((n, c) => n + c.votes, 0)
+  const unmatchedFeedVotes = [...feedByKey.entries()].filter(([k]) => !used.has(k)).reduce((n, [, v]) => n + v, 0)
+
+  // Two candidates with one surname in a race would get each other's votes.
+  const ambiguous = hasDuplicateKeys(race.candidates.map((c) => c.name)) || hasDuplicateKeys(feed.candidates.map((c) => c.name))
   const matched =
+    !ambiguous &&
     differences.length >= 2 &&
     unmatchedCivicVotes <= civicTotal * UNMATCHED_LIMIT &&
     unmatchedFeedVotes <= feedTotal * UNMATCHED_LIMIT
 
   const useFeed = matched && feedTotal > civicTotal
-  const unitsPct = feed.unitsTotal > 0 ? (feed.unitsReporting / feed.unitsTotal) * 100 : 0
-
   const crossCheck: CrossCheck = {
     ...meta,
     feedTotal,
@@ -80,25 +91,21 @@ export function mergeFeed(
     used: useFeed,
     differences,
   }
-
   if (!useFeed) return { ...race, crossCheck }
 
-  // Scale civicAPI's reporting estimate by how much further the state count is.
-  // With nothing from civicAPI yet, the share of counties reporting is the only guide.
-  const pct =
-    race.pct >= 100
-      ? 100
-      : civicTotal > 0
-        ? Math.min(99, (race.pct * feedTotal) / civicTotal)
-        : Math.min(99, unitsPct)
-
+  // Every count shown comes from the state: write-ins take the state's
+  // write-in total, and candidates the state does not list show 0.
+  let writeInGiven = false
   return {
     ...race,
-    pct,
-    pctEstimated: true,
-    candidates: race.candidates.map((c) =>
-      isWriteIn(c.name) ? c : { ...c, votes: feedByKey.get(personKey(c.name)) ?? c.votes },
-    ),
+    candidates: race.candidates.map((c) => {
+      if (isWriteIn(c.name)) {
+        const votes = writeInGiven ? 0 : feedWriteIns
+        writeInGiven = true
+        return { ...c, votes }
+      }
+      return { ...c, votes: feedByKey.get(personKey(c.name)) ?? 0 }
+    }),
     crossCheck,
   }
 }

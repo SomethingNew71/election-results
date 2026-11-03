@@ -57,39 +57,80 @@ export function feedKey(r: { state: string; kind: RaceKind; district: string | n
   return `${r.state}|${r.kind}|${r.district ?? ''}`
 }
 
-/** All feed races keyed by state, kind and district. A failing feed is skipped. */
-export async function stateFeedRaces(): Promise<Map<string, { race: FeedRace; meta: FeedMeta }>> {
-  const out = new Map<string, { race: FeedRace; meta: FeedMeta }>()
-  const results = await Promise.allSettled(
-    CLARITY_FEEDS.map(async (f) => {
-      const base = `${CLARITY}/${f.state}/${f.eid}`
-      const ver = await cachedGet<string>(`${base}/current_ver.txt`, f.source, async (res) => (await res.text()).trim())
-      if (!/^\d+$/.test(ver.data)) throw new Error(`${f.source}: unexpected version "${ver.data.slice(0, 40)}"`)
-      const summary = await cachedGet<ClarityContest[]>(`${base}/${ver.data}/json/en/summary.json`, f.source)
-      const meta: FeedMeta = {
-        source: f.source,
-        sourceUrl: `${base}/`,
-        fetchedAt: new Date(summary.fetchedAt).toISOString(),
-        version: ver.data,
-      }
-      return parseClarity(f.state, summary.data).map((race) => ({ race, meta }))
-    }),
-  )
-  for (const r of results) {
-    if (r.status === 'rejected') {
-      console.warn('State feed failed', r.reason)
-      continue
-    }
-    for (const item of r.value) out.set(feedKey(item.race), item)
+type FeedMap = Map<string, { race: FeedRace; meta: FeedMeta }>
+type Feed = (typeof CLARITY_FEEDS)[number]
+
+/** A request waits at most this long for state feeds, then uses the last good copy. */
+const BUDGET_MS = 1_500
+/** After a failure, a state's feed is not retried for this long. */
+const FAILURE_BACKOFF_MS = 60_000
+const TIMEOUT_MS = 8_000
+
+/**
+ * Latest parsed feed per state. Only the small parsed races are kept, and a
+ * version lower than one already applied is ignored, so counts never move
+ * backwards between polls.
+ */
+const latest = new Map<string, { version: number; races: FeedRace[]; meta: FeedMeta }>()
+const failedAt = new Map<string, number>()
+const refreshing = new Map<string, Promise<void>>()
+
+function refreshFeed(f: Feed): Promise<void> {
+  if (Date.now() - (failedAt.get(f.state) ?? 0) < FAILURE_BACKOFF_MS) return Promise.resolve()
+  const pending = refreshing.get(f.state)
+  if (pending) return pending
+
+  const base = `${CLARITY}/${f.state}/${f.eid}`
+  const run = (async () => {
+    const ver = await cachedGet<string>(`${base}/current_ver.txt`, f.source, async (res) => (await res.text()).trim())
+    if (!/^\d+$/.test(ver.data)) throw new Error(`${f.source}: unexpected version "${ver.data.slice(0, 40)}"`)
+    const version = Number(ver.data)
+    const prev = latest.get(f.state)
+    if (prev && version <= prev.version) return
+
+    const res = await fetch(`${base}/${version}/json/en/summary.json`, {
+      headers: { accept: 'application/json', 'user-agent': USER_AGENT },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    if (!res.ok) throw new Error(`${f.source}: summary ${res.status}`)
+    const races = parseClarity(f.state, (await res.json()) as ClarityContest[])
+    latest.set(f.state, {
+      version,
+      races,
+      meta: { source: f.source, sourceUrl: `${base}/`, fetchedAt: new Date().toISOString(), version: String(version) },
+    })
+  })()
+    .catch((err) => {
+      failedAt.set(f.state, Date.now())
+      console.warn(`State feed ${f.state} failed; retrying after ${FAILURE_BACKOFF_MS / 1000}s`, err)
+    })
+    .finally(() => refreshing.delete(f.state))
+  refreshing.set(f.state, run)
+  return run
+}
+
+/**
+ * Feed races keyed by state, kind and district. Waits up to BUDGET_MS for a
+ * refresh, so a slow or blocked feed never holds up the page.
+ */
+export async function stateFeedRaces(): Promise<FeedMap> {
+  const refresh = Promise.allSettled(CLARITY_FEEDS.map(refreshFeed))
+  await Promise.race([refresh, new Promise((resolve) => setTimeout(resolve, BUDGET_MS))])
+  const out: FeedMap = new Map()
+  for (const { races, meta } of latest.values()) {
+    for (const race of races) out.set(feedKey(race), { race, meta })
   }
   return out
 }
 
-export async function applyStateFeeds(races: RaceSummary[]): Promise<RaceSummary[]> {
-  const feeds = await stateFeedRaces()
+export function applyFeeds(races: RaceSummary[], feeds: FeedMap): RaceSummary[] {
   if (!feeds.size) return races
+  // Two civicAPI races with one key (a regular and a special Senate race) cannot be told apart.
+  const keyCount = new Map<string, number>()
+  for (const r of races) keyCount.set(feedKey(r), (keyCount.get(feedKey(r)) ?? 0) + 1)
   return races.map((race) => {
-    const hit = feeds.get(feedKey(race))
-    return hit ? mergeFeed(race, hit.race, hit.meta) : race
+    const key = feedKey(race)
+    const hit = feeds.get(key)
+    return hit && keyCount.get(key) === 1 ? mergeFeed(race, hit.race, hit.meta) : race
   })
 }

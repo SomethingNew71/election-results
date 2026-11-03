@@ -1,7 +1,7 @@
 import type { Candidate, RaceKind, RaceSummary, RegionResult } from '#shared/types'
 
 const BASE = 'https://civicapi.org/api/v2'
-const USER_AGENT = 'election-results-worker (+https://github.com/SomethingNew71/election-results)'
+export const USER_AGENT = 'election-results-worker (+https://github.com/SomethingNew71/election-results)'
 
 /** Fresh window per isolate. civicAPI itself caches for 15 s. */
 const TTL_MS = 20_000
@@ -40,13 +40,15 @@ export async function cachedGet<T>(
   url: string,
   sourceName: string,
   parse: (res: Response) => Promise<unknown> = (res) => res.json(),
+  /** Cache under a stable key when the URL changes per version. */
+  key = url,
 ): Promise<Fetched<T>> {
-  const hit = cache.get(url)
+  const hit = cache.get(key)
   if (hit && Date.now() - hit.fetchedAt < TTL_MS) {
     return { data: hit.data as T, fetchedAt: hit.fetchedAt, stale: false }
   }
 
-  const pending = inflight.get(url)
+  const pending = inflight.get(key)
   if (pending) return pending as Promise<Fetched<T>>
 
   const request = (async (): Promise<Fetched<unknown>> => {
@@ -59,7 +61,7 @@ export async function cachedGet<T>(
       if (!res.ok) throw createError({ statusCode: 502, statusMessage: `${sourceName} ${res.status}` })
       const data = await parse(res)
       const fetchedAt = Date.now()
-      remember(url, data, fetchedAt)
+      remember(key, data, fetchedAt)
       return { data, fetchedAt, stale: false }
     } catch (err) {
       const isNotFound = (err as { statusCode?: number }).statusCode === 404
@@ -70,10 +72,10 @@ export async function cachedGet<T>(
       if (isNotFound) throw err
       throw createError({ statusCode: 502, statusMessage: `${sourceName} is not responding` })
     } finally {
-      inflight.delete(url)
+      inflight.delete(key)
     }
   })()
-  inflight.set(url, request)
+  inflight.set(key, request)
   return request as Promise<Fetched<T>>
 }
 

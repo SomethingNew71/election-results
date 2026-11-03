@@ -9,25 +9,22 @@ export default defineEventHandler(async (event): Promise<RaceDetail> => {
 
   // Only proxy races on today's ballot, so arbitrary ids cannot fill the cache.
   // In dev, past races (for example 5861, the finished 2025 VA governor race) are allowed for testing.
-  const { races } = await trackedRaces()
+  const [{ races }, feeds] = await Promise.all([trackedRaces(), stateFeedRaces()])
   const tracked = races.find((r) => r.id === id)
   if (!tracked && !import.meta.dev) throw createError({ statusCode: 404, statusMessage: 'Race not tracked' })
 
   const { data: d, fetchedAt, stale } = await civicGet<CivicRaceDetail>(`/race/${id}`)
   const kind = kindOf(d.election_type)
   if (!kind) throw createError({ statusCode: 404, statusMessage: 'Race not tracked' })
-  const summary = tracked ?? { id, kind, name: d.election_name, state: d.province ?? 'US', district: d.district, pct: 0, candidates: [] }
-
-  const [merged] = await applyStateFeeds([
-    {
-      ...summary,
-      name: d.election_name,
-      pct: d.percent_reporting ?? 0,
-      pctEstimated: false,
-      candidates: d.candidates.map(toCandidate),
-      crossCheck: undefined,
-    },
-  ])
+  const base = {
+    ...(tracked ?? { id, kind, state: d.province ?? 'US', district: d.district }),
+    name: d.election_name,
+    pct: d.percent_reporting ?? 0,
+    candidates: d.candidates.map(toCandidate),
+    crossCheck: undefined,
+  }
+  // Merge alongside every tracked race so the duplicate-key guard sees the whole ballot.
+  const merged = applyFeeds(tracked ? races.map((r) => (r.id === id ? base : r)) : [base], feeds).find((r) => r.id === id)
 
   setResponseHeader(event, 'cache-control', 'public, max-age=15')
   return {

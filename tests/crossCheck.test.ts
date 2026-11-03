@@ -51,8 +51,33 @@ describe('mergeFeed', () => {
     )
     expect(merged.crossCheck?.used).toBe(true)
     expect(merged.candidates.map((c) => c.votes)).toEqual([500, 700])
-    expect(merged.pct).toBeCloseTo((40 * 1203) / 1000)
-    expect(merged.pctEstimated).toBe(true)
+    expect(merged.pct).toBe(40)
+  })
+
+  it('refuses to match when two candidates share a surname', () => {
+    const merged = mergeFeed(
+      race(40, [cand('Jason Crow', 400), cand('Ann Crow', 600)]),
+      feed([
+        { name: 'Jason Crow', votes: 500 },
+        { name: 'Ann Crow', votes: 700 },
+      ]),
+      meta,
+    )
+    expect(merged.crossCheck?.matched).toBe(false)
+    expect(merged.candidates.map((c) => c.votes)).toEqual([400, 600])
+  })
+
+  it('takes every shown count from the state when it uses the feed', () => {
+    const merged = mergeFeed(
+      race(40, [cand('Zach Lahn', 400), cand('Rob Sand', 600), cand('Write-in', 5), cand('Minor Person', 2)]),
+      feed([
+        { name: 'Zach Lahn and Derek Wulf', votes: 500 },
+        { name: 'Rob Sand and Dave Muhlbauer', votes: 700 },
+        { name: 'Write-in', votes: 9 },
+      ]),
+      meta,
+    )
+    expect(merged.candidates.map((c) => c.votes)).toEqual([500, 700, 9, 0])
   })
 
   it('keeps civicAPI when it is ahead', () => {
@@ -93,7 +118,7 @@ describe('mergeFeed', () => {
       meta,
     )
     expect(merged.crossCheck?.used).toBe(true)
-    expect(merged.candidates.map((c) => c.votes)).toEqual([500, 700, 2])
+    expect(merged.candidates.map((c) => c.votes)).toEqual([500, 700, 0])
   })
 
   it('rejects a civicAPI-only candidate with real support', () => {
@@ -108,16 +133,17 @@ describe('mergeFeed', () => {
     expect(merged.crossCheck?.matched).toBe(false)
   })
 
-  it('estimates reporting from counties when civicAPI has nothing', () => {
+  it('never derives reporting % from counties reporting', () => {
     const merged = mergeFeed(
       race(0, [cand('Zach Lahn', 0), cand('Rob Sand', 0)]),
       feed([
         { name: 'Zach Lahn and Derek Wulf', votes: 50 },
         { name: 'Rob Sand and Dave Muhlbauer', votes: 70 },
-      ], 33),
+      ], 98),
       meta,
     )
-    expect(merged.pct).toBeCloseTo(33.33, 1)
+    expect(merged.crossCheck?.used).toBe(true)
+    expect(merged.pct).toBe(0)
   })
 })
 

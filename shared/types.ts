@@ -19,8 +19,6 @@ export interface RaceSummary {
   /** District label such as "TX-20"; null for statewide races. */
   district: string | null
   pct: number
-  /** True when `pct` was scaled from a state feed rather than read from civicAPI. */
-  pctEstimated?: boolean
   candidates: Candidate[]
   crossCheck?: CrossCheck
 }
