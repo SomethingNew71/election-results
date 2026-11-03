@@ -18,6 +18,11 @@ const STATES: [string, string, string][] = [
 export const STATE_BY_POSTAL = new Map(STATES.map(([postal, fips, name]) => [postal, { postal, fips, name }]))
 export const STATE_BY_FIPS = new Map(STATES.map(([postal, fips, name]) => [fips, { postal, fips, name }]))
 
+/** Territories with races in civicAPI. They are not on the map. */
+export const TERRITORY_NAMES: Record<string, string> = {
+  AS: 'American Samoa', GU: 'Guam', MP: 'Northern Mariana Islands', PR: 'Puerto Rico', VI: 'U.S. Virgin Islands',
+}
+
 export function stateName(postal: string): string {
-  return STATE_BY_POSTAL.get(postal)?.name ?? postal
+  return STATE_BY_POSTAL.get(postal)?.name ?? TERRITORY_NAMES[postal] ?? postal
 }

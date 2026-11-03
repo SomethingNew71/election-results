@@ -20,6 +20,8 @@ export interface RaceSummary {
   district: string | null
   pct: number
   candidates: Candidate[]
+  /** Non-voting House delegate (DC and the territories): off the map and out of the seat count. */
+  delegate?: boolean
   crossCheck?: CrossCheck
 }
 

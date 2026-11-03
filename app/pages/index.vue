@@ -32,12 +32,13 @@ const holderTable = computed(() =>
   kind.value === 'senate' ? SENATE_NOT_UP : kind.value === 'governor' ? GOVERNOR_NOT_UP : null,
 )
 
-/** Only the 50 states and DC appear on the map and in the seat count. */
-const races = computed(() =>
-  (data.value?.races ?? []).filter((r) => r.kind === kind.value && STATE_BY_POSTAL.has(r.state)),
-)
+/** Only the 50 states and DC appear on the map and in the seat count; delegates never do. */
+const onMap = (r: RaceSummary) => STATE_BY_POSTAL.has(r.state) && !r.delegate
+const races = computed(() => (data.value?.races ?? []).filter((r) => r.kind === kind.value && onMap(r)))
 const otherRaces = computed(() =>
-  (data.value?.races ?? []).filter((r) => r.kind === kind.value && !STATE_BY_POSTAL.has(r.state)),
+  (data.value?.races ?? [])
+    .filter((r) => r.kind === kind.value && !onMap(r))
+    .sort((a, b) => a.name.localeCompare(b.name)),
 )
 const chamber = computed(() => data.value?.chambers.find((c) => c.kind === kind.value))
 
@@ -351,7 +352,10 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
       </section>
 
       <section v-if="otherRaces.length" class="mt-6 rounded-lg border border-rule bg-panel p-5">
-        <h2 class="font-display text-lg font-semibold tracking-tight">Territories</h2>
+        <h2 class="font-display text-lg font-semibold tracking-tight">
+          {{ kind === 'house' ? 'DC and territory delegates' : 'Territories' }}
+        </h2>
+        <p v-if="kind === 'house'" class="mt-1 text-sm text-muted">Non-voting members. Not on the map or in the 435-seat count.</p>
         <ul class="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <li v-for="race in otherRaces" :key="race.id">
             <NuxtLink :to="`/race/${race.id}`" class="font-medium underline-offset-4 hover:underline">{{ race.name }}</NuxtLink>
