@@ -88,8 +88,9 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
           <div v-if="showCountyMap" class="mt-8">
             <h2 class="font-display text-lg font-semibold tracking-tight">By county</h2>
             <p class="text-muted text-xs">
-              Colour shows the county leader. Darker = wider county margin. Grey = no votes.<template v-if="data.crossCheck?.used">
-                County figures are from civicAPI.</template>
+              Colour shows the county leader. Darker = wider county margin. Grey = no votes.<template v-if="data.regionSource === 'state'">
+                County figures are from the {{ data.crossCheck?.source }}. A county's % is its share of precincts fully reported.</template
+              ><template v-else-if="data.crossCheck?.used"> County figures are from civicAPI.</template>
             </p>
             <CountyMap class="mt-3" :state-fips="stateFips!" :regions="data.regions" />
           </div>

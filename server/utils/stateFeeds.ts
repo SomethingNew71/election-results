@@ -1,4 +1,4 @@
-import type { FeedRace, RaceKind, RaceSummary } from '#shared/types'
+import type { FeedRace, FeedRegion, RaceKind, RaceSummary } from '#shared/types'
 
 /**
  * Official state results published on Clarity ENR (Scytl) for the 2026
@@ -30,20 +30,48 @@ export function contestKind(state: string, name: string): { kind: RaceKind; dist
   return null
 }
 
-export function parseClarity(state: string, contests: ClarityContest[]): FeedRace[] {
+/** One contest in Clarity's `json/details.json`: arrays are per county, in the same order. */
+export interface ClarityDetail {
+  K: string
+  /** County names. */
+  P: string[]
+  /** Precincts fully reported, per county. */
+  PX: number[]
+  /** Precincts in total, per county. */
+  PY: number[]
+  /** Votes per county, per candidate in the summary's `CH` order. */
+  V: number[][]
+}
+
+export function parseClarity(state: string, contests: ClarityContest[], details: ClarityDetail[] = []): FeedRace[] {
+  const detailByKey = new Map(details.map((d) => [d.K, d]))
   const out: FeedRace[] = []
   for (const c of contests) {
     const kind = contestKind(state, c.C)
     if (!kind) continue
+    const d = detailByKey.get(c.K)
     out.push({
       state,
       ...kind,
       candidates: c.CH.map((name, i) => ({ name, votes: Number(c.V[i]) || 0 })),
       unitsReporting: c.PR ?? 0,
       unitsTotal: c.TP ?? 0,
+      regions: d ? parseRegions(d, c.CH.length) : undefined,
     })
   }
   return out
+}
+
+function parseRegions(d: ClarityDetail, candidates: number): FeedRegion[] | undefined {
+  // A shape change in the feed drops the county breakdown, not the race.
+  if (!Array.isArray(d.P) || d.V?.length !== d.P.length) return undefined
+  if (d.V.some((v) => !Array.isArray(v) || v.length !== candidates)) return undefined
+  return d.P.map((name, i) => ({
+    name,
+    precinctsReporting: Number(d.PX?.[i]) || 0,
+    precinctsTotal: Number(d.PY?.[i]) || 0,
+    votes: d.V[i]!.map((n) => Number(n) || 0),
+  }))
 }
 
 export interface FeedMeta {
@@ -58,7 +86,7 @@ export function feedKey(r: { state: string; kind: RaceKind; district: string | n
   return `${r.state}|${r.kind}|${r.district ?? ''}`
 }
 
-type FeedMap = Map<string, { race: FeedRace; meta: FeedMeta }>
+export type FeedMap = Map<string, { race: FeedRace; meta: FeedMeta }>
 type Feed = (typeof CLARITY_FEEDS)[number]
 
 /** A request waits at most this long for state feeds, then uses the last good copy. */
@@ -92,12 +120,23 @@ function refreshFeed(f: Feed): Promise<void> {
       return
     }
 
-    const res = await fetch(`${base}/${version}/json/en/summary.json`, {
-      headers: { accept: 'application/json', 'user-agent': USER_AGENT },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    })
+    const get = (path: string) =>
+      fetch(`${base}/${version}/${path}`, {
+        headers: { accept: 'application/json', 'user-agent': USER_AGENT },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      })
+    const [res, detailRes] = await Promise.all([get('json/en/summary.json'), get('json/details.json').catch(() => null)])
     if (!res.ok) throw new Error(`${f.source}: summary ${res.status}`)
-    const races = parseClarity(f.state, (await res.json()) as ClarityContest[])
+    // County detail is optional: without it the race still cross-checks.
+    let details: ClarityDetail[] = []
+    if (detailRes?.ok) {
+      try {
+        details = ((await detailRes.json()) as { Contests?: ClarityDetail[] }).Contests ?? []
+      } catch (err) {
+        console.warn(`${f.source}: county detail unreadable`, err)
+      }
+    }
+    const races = parseClarity(f.state, (await res.json()) as ClarityContest[], details)
     latest.set(f.state, {
       version,
       races,
