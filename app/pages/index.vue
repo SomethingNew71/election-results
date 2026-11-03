@@ -58,6 +58,9 @@ const allInferred = computed(() =>
   })),
 )
 const { events, changedAt } = useRaceChanges(allInferred)
+// Kept here: selecting a state or a failed poll unmounts the <details>.
+const statusKeyOpen = ref(false)
+
 const now = useClock()
 const isChanged = (id: number) => now.value - (changedAt.value[id] ?? 0) < CHANGE_MARK_MS
 
@@ -275,7 +278,7 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
               Click a state on the map to see its {{ kind === 'house' ? 'districts' : 'race' }}. Each race page has a county map and the
               full vote-count inference.
             </p>
-            <details class="group mt-3">
+            <details class="group mt-3" :open="statusKeyOpen" @toggle="statusKeyOpen = ($event.target as HTMLDetailsElement).open">
               <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">
                 What the statuses mean
                 <span aria-hidden="true" class="text-muted text-lg leading-none transition-transform group-open:rotate-90">▸</span>
