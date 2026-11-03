@@ -1,0 +1,31 @@
+{
+  "name": "election-results",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "bun run build && wrangler dev",
+    "deploy": "bun run build && wrangler deploy",
+    "postinstall": "nuxt prepare",
+    "test": "vitest run",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "d3-geo": "^3.1.2",
+    "nuxt": "^4.6.4",
+    "topojson-client": "^3.1.0",
+    "us-atlas": "^3.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.4",
+    "@types/d3-geo": "^3.1.1",
+    "@types/topojson-client": "^3.1.5",
+    "@types/topojson-specification": "^1.0.5",
+    "tailwindcss": "^4.3.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0",
+    "vue-tsc": "^3.3.14",
+    "wrangler": "^4.157.0"
+  }
+}
