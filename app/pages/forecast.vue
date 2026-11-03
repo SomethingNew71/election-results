@@ -34,22 +34,13 @@ const unit = computed(() => (kind.value === 'governor' ? 'governorships' : 'seat
 const D = partyColor('Democratic')
 const R = partyColor('Republican')
 
-/** Published figures that cannot all be true; shown next to them, not corrected. */
-const problems = computed(() => {
-  const c = chamber.value
-  if (!c) return []
-  const out: string[] = []
-  const seats = CHAMBER_SEATS[c.kind]
-  const sum = c.totals ? c.totals.dem + c.totals.rep + c.totals.tossup + c.totals.ind : seats
-  if (sum !== seats) out.push(`The totals add up to ${sum}; there are ${seats}.`)
-  if (c.probDem !== null && c.probRep !== null && c.probDem + c.probRep > 100.5) {
-    out.push(`The two majority chances add up to ${formatNum(c.probDem + c.probRep)}%, which is more than 100%.`)
-  }
-  if (c.seats && c.seats.expectedDem + c.seats.expectedRep > seats + 0.5) {
-    out.push(`The expected ${unit.value} add up to ${formatNum(c.seats.expectedDem + c.seats.expectedRep)}; there are ${seats}.`)
-  }
-  return out
+/** Shown big: Democratic and Republican seats by rating, as civicAPI's site does. */
+const simOk = computed(() => !chamber.value?.simulationIssues.length)
+const totalsSum = computed(() => {
+  const t = chamber.value?.totals
+  return t ? t.dem + t.rep + t.ind + t.tossup + t.unrated : 0
 })
+const sumOf = (t: { dem: number; rep: number; tossup: number; ind: number }) => t.dem + t.rep + t.tossup + t.ind
 
 const ratingCounts = computed(() => {
   const counts = new Map<string, number>()
@@ -118,17 +109,8 @@ useHead({ title: () => `civicAPI ${KINDS.find((k) => k.kind === kind.value)!.lab
 
 <template>
   <div>
-    <div role="note" class="rounded-lg border-2 border-dashed border-rule bg-panel px-4 py-3 text-sm">
-      <p class="font-semibold">This page is a forecast, not results.</p>
-      <p class="text-muted mt-1">
-        It shows <a href="https://civicapi.org/forecasts" class="underline underline-offset-2 hover:text-ink" target="_blank" rel="noopener">civicAPI's
-        2026 forecast</a> as published: a blend of expert ratings, betting markets, polls and money raised. It is not our estimate, and
-        nothing on the results pages uses it. Betting markets react to counts as they come in, so on election night it can partly
-        reflect results. <NuxtLink to="/" class="underline underline-offset-2 hover:text-ink">Back to results</NuxtLink>
-      </p>
-    </div>
-
-    <nav class="mt-6 flex gap-1 border-b border-rule" aria-label="Chamber">
+    <ModeSwitch />
+    <nav class="flex gap-1 border-b border-rule" aria-label="Chamber">
       <button
         v-for="k in KINDS"
         :key="k.kind"
@@ -140,6 +122,16 @@ useHead({ title: () => `civicAPI ${KINDS.find((k) => k.kind === kind.value)!.lab
       </button>
       <span v-if="data" class="text-muted num ml-auto hidden self-center text-xs sm:inline">Fetched {{ formatSnapshot(data.dataAsOf) }}</span>
     </nav>
+
+    <div role="note" class="mt-4 rounded-lg border-2 border-dashed border-rule bg-panel px-4 py-3 text-sm">
+      <p class="font-semibold">This page is a forecast, not results.</p>
+      <p class="text-muted mt-1">
+        It shows <a href="https://civicapi.org/forecasts" class="underline underline-offset-2 hover:text-ink" target="_blank" rel="noopener">civicAPI's
+        2026 forecast</a> as published: a blend of expert ratings, betting markets, polls and money raised. It is not our estimate, and
+        nothing on the results pages uses it. Betting markets react to counts as they come in, so on election night it can partly
+        reflect results.
+      </p>
+    </div>
 
     <div v-if="data?.stale" role="status" class="mt-4 rounded border border-ink bg-panel px-4 py-3 text-sm">
       civicAPI is not responding. This forecast is an older copy.
@@ -154,51 +146,71 @@ useHead({ title: () => `civicAPI ${KINDS.find((k) => k.kind === kind.value)!.lab
     <template v-else-if="chamber">
       <section class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div class="rounded-lg border border-rule bg-panel p-5">
-          <div class="kicker">civicAPI's chance of a majority ({{ chamber.majorityThreshold }} {{ unit }})</div>
+          <div class="kicker">{{ unit === 'seats' ? 'Seats' : 'Governorships' }} by civicAPI rating · {{ chamber.majorityThreshold }} for a majority</div>
           <div class="mt-2 flex flex-wrap items-baseline gap-x-8 gap-y-2">
-            <div v-if="chamber.probDem !== null">
-              <span class="num font-display text-4xl font-bold" :style="{ color: D }">{{ formatNum(chamber.probDem) }}%</span>
+            <div>
+              <span class="num font-display text-4xl font-bold" :style="{ color: D }">{{ chamber.totals.dem }}</span>
               <span class="text-muted ml-1 text-sm">Democratic</span>
             </div>
-            <div v-if="chamber.probRep !== null">
-              <span class="num font-display text-4xl font-bold" :style="{ color: R }">{{ formatNum(chamber.probRep) }}%</span>
+            <div>
+              <span class="num font-display text-4xl font-bold">{{ chamber.totals.tossup }}</span>
+              <span class="text-muted ml-1 text-sm">Toss-up</span>
+            </div>
+            <div>
+              <span class="num font-display text-4xl font-bold" :style="{ color: R }">{{ chamber.totals.rep }}</span>
               <span class="text-muted ml-1 text-sm">Republican</span>
             </div>
+            <div v-if="chamber.totals.ind">
+              <span class="num font-display text-4xl font-bold">{{ chamber.totals.ind }}</span>
+              <span class="text-muted ml-1 text-sm">Independent</span>
+            </div>
           </div>
-
-          <dl v-if="chamber.seats" class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt class="text-muted">Democratic {{ unit }} (median, 90% range)</dt>
-              <dd class="num font-semibold">{{ chamber.seats.dem[1] }} <span class="text-muted font-normal">({{ chamber.seats.dem[0] }}–{{ chamber.seats.dem[2] }})</span></dd>
-            </div>
-            <div>
-              <dt class="text-muted">Republican {{ unit }} (median, 90% range)</dt>
-              <dd class="num font-semibold">{{ chamber.seats.rep[1] }} <span class="text-muted font-normal">({{ chamber.seats.rep[0] }}–{{ chamber.seats.rep[2] }})</span></dd>
-            </div>
-          </dl>
           <p class="text-muted mt-2 text-xs">
-            <template v-if="chamber.seats?.simulations">From {{ chamber.seats.simulations.toLocaleString('en-US') }} simulations run by civicAPI. </template>
-            <template v-if="chamber.chamberRating">civicAPI rates the chamber {{ chamber.chamberRating }}. </template>
-            <template v-if="chamber.updated">Forecast of {{ chamber.updated }}; fetched {{ formatSnapshot(data!.dataAsOf) }}.</template>
+            Races counted by civicAPI's rating<template v-if="chamber.totals.notUp.dem + chamber.totals.notUp.rep + chamber.totals.notUp.ind">, plus {{ unit }} not on the ballot
+            (D {{ chamber.totals.notUp.dem }}<template v-if="chamber.totals.notUp.ind"> · I {{ chamber.totals.notUp.ind }}</template> · R {{ chamber.totals.notUp.rep }})</template>.
+            <template v-if="chamber.totals.unrated">{{ chamber.totals.unrated }} unrated. </template>
+            <template v-if="totalsSum !== CHAMBER_SEATS[chamber.kind]">These add up to {{ totalsSum }} of {{ CHAMBER_SEATS[chamber.kind] }}. </template>
+            <template v-if="chamber.publishedTotals">
+              civicAPI's API publishes D {{ chamber.publishedTotals.dem }} · Toss-up {{ chamber.publishedTotals.tossup }} · R {{ chamber.publishedTotals.rep }}
+              ({{ sumOf(chamber.publishedTotals) }} in total); these figures follow civicAPI's site instead.
+            </template>
           </p>
 
-          <div v-if="chamber.totals" class="mt-5">
-            <div class="kicker">Totals as published</div>
-            <p class="num mt-1 text-sm">
-              <span :style="{ color: D }" class="font-semibold">D {{ chamber.totals.dem }}</span> ·
-              <span class="font-semibold">Toss-up {{ chamber.totals.tossup }}</span> ·
-              <span :style="{ color: R }" class="font-semibold">R {{ chamber.totals.rep }}</span>
-              <template v-if="chamber.totals.ind"> · <span class="font-semibold">I {{ chamber.totals.ind }}</span></template>
-            </p>
-          </div>
-
-          <div v-if="problems.length" role="note" class="mt-4 rounded border border-rule bg-paper p-3 text-sm">
-            <p class="font-semibold">These published figures do not add up.</p>
+          <template v-if="simOk">
+            <div class="kicker mt-5">civicAPI's chance of a majority</div>
+            <div class="mt-1 flex flex-wrap items-baseline gap-x-8 gap-y-1">
+              <div v-if="chamber.probDem !== null">
+                <span class="num font-display text-2xl font-bold" :style="{ color: D }">{{ formatNum(chamber.probDem) }}%</span>
+                <span class="text-muted ml-1 text-sm">Democratic</span>
+              </div>
+              <div v-if="chamber.probRep !== null">
+                <span class="num font-display text-2xl font-bold" :style="{ color: R }">{{ formatNum(chamber.probRep) }}%</span>
+                <span class="text-muted ml-1 text-sm">Republican</span>
+              </div>
+            </div>
+            <dl v-if="chamber.seats" class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt class="text-muted">Democratic {{ unit }} (median, 90% range)</dt>
+                <dd class="num font-semibold">{{ chamber.seats.dem[1] }} <span class="text-muted font-normal">({{ chamber.seats.dem[0] }}–{{ chamber.seats.dem[2] }})</span></dd>
+              </div>
+              <div>
+                <dt class="text-muted">Republican {{ unit }} (median, 90% range)</dt>
+                <dd class="num font-semibold">{{ chamber.seats.rep[1] }} <span class="text-muted font-normal">({{ chamber.seats.rep[0] }}–{{ chamber.seats.rep[2] }})</span></dd>
+              </div>
+            </dl>
+          </template>
+          <div v-else role="note" class="mt-4 rounded border border-rule bg-paper p-3 text-sm">
+            <p class="font-semibold">civicAPI's simulation for this chamber does not add up today, so it is not shown.</p>
             <ul class="text-muted mt-1 list-disc pl-5">
-              <li v-for="p in problems" :key="p">{{ p }}</li>
+              <li v-for="p in chamber.simulationIssues" :key="p">{{ p }}</li>
             </ul>
-            <p class="text-muted mt-1">They are shown as civicAPI publishes them.</p>
+            <p class="text-muted mt-1">The race ratings and win chances below are not affected.</p>
           </div>
+          <p class="text-muted mt-2 text-xs">
+            <template v-if="simOk && chamber.seats?.simulations">From {{ chamber.seats.simulations.toLocaleString('en-US') }} simulations run by civicAPI. </template>
+            <template v-if="simOk && chamber.chamberRating">civicAPI rates the chamber {{ chamber.chamberRating }}. </template>
+            <template v-if="chamber.updated">Forecast of {{ chamber.updated }}; fetched {{ formatSnapshot(data!.dataAsOf) }}.</template>
+          </p>
 
           <div class="mt-5">
             <div class="kicker">Races on the ballot by rating</div>
@@ -226,7 +238,7 @@ useHead({ title: () => `civicAPI ${KINDS.find((k) => k.kind === kind.value)!.lab
             <p class="text-muted mt-2 text-xs">Colour shows the forecast rating. Darker = safer. Grey = toss-up. Blank = no race. Select a state to filter the table.</p>
           </template>
 
-          <div v-if="chamber.distribution.length" class="mt-5">
+          <div v-if="simOk && chamber.distribution.length" class="mt-5">
             <div class="kicker">Simulated Democratic {{ unit }}</div>
             <div class="mt-2 flex h-28 items-end gap-px" role="img" aria-label="Distribution of simulated seat counts">
               <div
