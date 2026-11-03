@@ -9,9 +9,13 @@ const archived = useArchive()
         <div class="kicker">United States · November 3, 2026</div>
         <div class="font-display text-3xl font-bold tracking-tight sm:text-4xl">Election Night Results</div>
       </NuxtLink>
-      <p class="text-muted max-w-sm text-sm">
-        Live vote counts and arithmetic estimates. No ratings, no endorsements, no race calls of our own.
-      </p>
+      <div class="max-w-sm text-sm">
+        <p class="text-muted">Live vote counts and arithmetic estimates. No ratings, no endorsements, no race calls of our own.</p>
+        <nav class="mt-1 flex gap-3" aria-label="Pages">
+          <NuxtLink to="/" class="underline-offset-2 hover:underline" active-class="font-semibold" exact-active-class="font-semibold">Results</NuxtLink>
+          <NuxtLink to="/forecast" class="text-muted underline-offset-2 hover:text-ink hover:underline" active-class="font-semibold !text-ink">civicAPI forecast</NuxtLink>
+        </nav>
+      </div>
     </header>
 
     <NuxtPage />

@@ -23,6 +23,7 @@ Live 2026 US election results on Cloudflare Workers (`election-results.classicmi
 - **2024 baseline is a second opinion only.** `shared/utils/baseline.ts` (data `public/data/county-2024.json`, built by `scripts/build-county-2024.ts`) gives a turnout-based votes-left estimate and a county shift vs the 2024 presidential margin. Neither changes a status. Statewide races only.
 - **Archive mode.** `bun scripts/archive.ts` then `ARCHIVE=1 bun run deploy`: pages read `public/archive/*.json` in the browser and stop polling. A plain `bun run deploy` is always the live site.
 - **Runoffs and certification.** `RUNOFF_DATES` in `shared/utils/rules.ts` (GA 1 Dec all races, LA 12 Dec House only — LA House was an open primary on 3 Nov after the 2026 redistricting). `shared/utils/certification.ts` is edited by hand as states certify.
+- **The forecast lives only on `/forecast`.** `/api/forecast` passes civicAPI's `/forecast/{senate,house,governor}/2026/civicapi` through unchanged. No results page, status, colour or seat bar reads it. Published figures that do not add up (on 2026-11-03 the Senate showed D 100% and R 100% majority chances, and 126 seats) are shown with a note, never corrected. Its `*_pct` fields are win chances, not vote shares.
 - **Map contrast.** `--map-line` outlines every state and county at ≥3:1 against `--panel` (WCAG 1.4.11). Hawaii has a bounding-box hit area; small states also get buttons under the map.
 
 ## Gotchas
