@@ -11,15 +11,21 @@
   --color-rule: var(--rule);
   --color-empty: var(--empty);
   --color-accent: var(--accent);
+  --color-map-line: var(--map-line);
 }
 
+/*
+ * --map-line outlines every state and county. It keeps at least 3:1 contrast
+ * against --panel (WCAG 1.4.11) so shapes stay visible at low fill opacity.
+ */
 :root {
   --paper: #f4f2ec;
   --panel: #fbfaf6;
   --ink: #16161a;
   --muted: #64625c;
   --rule: #d9d5cb;
-  --empty: #e4e0d6;
+  --empty: #d6d1c4;
+  --map-line: #7c776c;
   --accent: #1d1d1f;
   color-scheme: light;
 }
@@ -31,7 +37,8 @@
     --ink: #ecebe6;
     --muted: #9b9890;
     --rule: #2e2e33;
-    --empty: #26262b;
+    --empty: #3a3a41;
+    --map-line: #77777f;
     --accent: #ecebe6;
     color-scheme: dark;
   }
@@ -43,7 +50,8 @@
   --ink: #ecebe6;
   --muted: #9b9890;
   --rule: #2e2e33;
-  --empty: #26262b;
+  --empty: #3a3a41;
+  --map-line: #77777f;
   --accent: #ecebe6;
   color-scheme: dark;
 }

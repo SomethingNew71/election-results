@@ -89,13 +89,13 @@ const hover = ref<(typeof shapes.value.counties)[number] | null>(null)
           :d="c.d"
           :fill="c.leader ? c.leader.color : 'var(--empty)'"
           :fill-opacity="c.leader ? c.opacity : 1"
-          stroke="var(--paper)"
-          stroke-width="0.6"
+          stroke="var(--map-line)"
+          stroke-width="0.5"
           @mouseenter="hover = c"
           @mouseleave="hover = null"
           @click="hover = hover?.id === c.id ? null : c"
         />
-        <path :d="shapes.outline" fill="none" stroke="var(--ink)" stroke-width="1" stroke-opacity="0.5" pointer-events="none" />
+        <path :d="shapes.outline" fill="none" stroke="var(--ink)" stroke-width="1.25" pointer-events="none" />
       </g>
     </svg>
     <div
