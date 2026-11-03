@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mergeFeed, personKey } from '../shared/utils/crossCheck'
+import { feedRegions, mergeFeed, personKey } from '../shared/utils/crossCheck'
 import { contestKind, parseClarity } from '../server/utils/stateFeeds'
 import type { Candidate, FeedRace, RaceSummary } from '../shared/types'
 
@@ -179,5 +179,50 @@ describe('Clarity contests', () => {
         unitsTotal: 99,
       },
     ])
+  })
+})
+
+describe('state county regions', () => {
+  it('maps county votes onto civicAPI candidates when the feed is used', () => {
+    const merged = mergeFeed(
+      race(40, [cand('Zach Lahn', 400), cand('Rob Sand', 600), cand('Write-in', 1)]),
+      {
+        ...feed([
+          { name: 'Rob Sand and Dave Muhlbauer', votes: 700 },
+          { name: 'Zach Lahn and Derek Wulf', votes: 500 },
+          { name: 'Write-in', votes: 3 },
+        ]),
+        regions: [
+          { name: 'Adair', precinctsReporting: 2, precinctsTotal: 4, votes: [70, 50, 1] },
+          { name: 'Adams', precinctsReporting: 0, precinctsTotal: 5, votes: [0, 0, 0] },
+        ],
+      },
+      meta,
+    )
+    const regions = feedRegions(merged, {
+      ...feed([
+        { name: 'Rob Sand and Dave Muhlbauer', votes: 700 },
+        { name: 'Zach Lahn and Derek Wulf', votes: 500 },
+        { name: 'Write-in', votes: 3 },
+      ]),
+      regions: [{ name: 'Adair', precinctsReporting: 2, precinctsTotal: 4, votes: [70, 50, 1] }],
+    })
+    expect(regions?.[0]?.pct).toBe(50)
+    expect(regions?.[0]?.candidates.map((c) => c.votes)).toEqual([50, 70, 1])
+  })
+
+  it('returns nothing when the feed is not used', () => {
+    const merged = mergeFeed(race(60, [cand('Zach Lahn', 600), cand('Rob Sand', 900)]), feed([{ name: 'Zach Lahn', votes: 1 }, { name: 'Rob Sand', votes: 1 }]), meta)
+    expect(feedRegions(merged, { ...feed([]), regions: [{ name: 'A', precinctsReporting: 1, precinctsTotal: 1, votes: [1, 1] }] })).toBeNull()
+  })
+})
+
+describe('Clarity county detail', () => {
+  it('drops the breakdown when its shape does not match', () => {
+    const summary = [{ K: '1000', C: 'United States Senator', CH: ['A B', 'C D'], V: [1, 2], PR: 1, TP: 2 }]
+    const good = parseClarity('IA', summary, [{ K: '1000', P: ['Adair'], PX: [1], PY: [2], V: [[1, 2]] }])
+    expect(good[0]?.regions).toEqual([{ name: 'Adair', precinctsReporting: 1, precinctsTotal: 2, votes: [1, 2] }])
+    const bad = parseClarity('IA', summary, [{ K: '1000', P: ['Adair'], PX: [1], PY: [2], V: [[1]] }])
+    expect(bad[0]?.regions).toBeUndefined()
   })
 })

@@ -32,6 +32,15 @@ export interface FeedRace {
   /** Reporting units (counties) with results, and the total. */
   unitsReporting: number
   unitsTotal: number
+  /** County breakdown; `votes` follows the order of `candidates`. */
+  regions?: FeedRegion[]
+}
+
+export interface FeedRegion {
+  name: string
+  precinctsReporting: number
+  precinctsTotal: number
+  votes: number[]
 }
 
 export interface CrossCheck {
@@ -82,6 +91,8 @@ export interface RegionResult {
 }
 
 export interface RaceDetail extends RaceSummary, Freshness {
+  /** Where `regions` came from. */
+  regionSource: 'civicapi' | 'state'
   pollsClose: string | null
   lastUpdated: string | null
   registeredVoters: number | null

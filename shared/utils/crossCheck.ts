@@ -1,4 +1,4 @@
-import type { CrossCheck, FeedRace, RaceSummary } from '../types'
+import type { CrossCheck, FeedRace, RaceSummary, RegionResult } from '../types'
 
 /**
  * Matching key for a candidate: the last name of the first person on the
@@ -108,4 +108,39 @@ export function mergeFeed(
     }),
     crossCheck,
   }
+}
+
+/**
+ * County results from a state feed, in civicAPI's region shape, for a race
+ * whose counts already come from that feed (`crossCheck.used`). Candidates
+ * keep civicAPI's names, parties and colours. A county's % is its share of
+ * precincts fully reported, the only figure the feed gives; mail ballots
+ * often arrive before any precinct reports, so this understates reporting.
+ */
+export function feedRegions(race: RaceSummary, feed: FeedRace): RegionResult[] | null {
+  if (!race.crossCheck?.used || !feed.regions?.length) return null
+  const index = new Map<string, number>()
+  const writeInIndex: number[] = []
+  feed.candidates.forEach((c, i) => {
+    if (isWriteIn(c.name)) writeInIndex.push(i)
+    else index.set(personKey(c.name), i)
+  })
+  return feed.regions.map((r) => {
+    let writeInGiven = false
+    return {
+      key: `state:${r.name}`,
+      name: r.name,
+      fips: null,
+      pct: r.precinctsTotal > 0 ? (100 * r.precinctsReporting) / r.precinctsTotal : 0,
+      candidates: race.candidates.map((c) => {
+        if (isWriteIn(c.name)) {
+          const votes = writeInGiven ? 0 : writeInIndex.reduce((n, i) => n + (r.votes[i] ?? 0), 0)
+          writeInGiven = true
+          return { ...c, votes }
+        }
+        const i = index.get(personKey(c.name))
+        return { ...c, votes: i === undefined ? 0 : (r.votes[i] ?? 0) }
+      }),
+    }
+  })
 }

@@ -29,6 +29,9 @@ export default defineEventHandler(async (event): Promise<RaceDetail | Response> 
   // Merge alongside every tracked race so the duplicate-key guard sees the whole ballot.
   const merged = applyFeeds(tracked ? races.map((r) => (r.id === id ? base : r)) : [base], feeds).find((r) => r.id === id)
 
+  const feed = merged ? feeds.get(feedKey(merged))?.race : undefined
+  const stateRegions = merged && feed ? feedRegions(merged, feed) : null
+
   setResponseHeader(event, 'cache-control', 'public, max-age=15')
   return {
     ...merged!,
@@ -39,6 +42,7 @@ export default defineEventHandler(async (event): Promise<RaceDetail | Response> 
     disputed: Boolean(d.is_disputed),
     dataAsOf: new Date(fetchedAt).toISOString(),
     stale,
-    regions: toRegions(d),
+    regions: stateRegions ?? toRegions(d),
+    regionSource: stateRegions ? 'state' : 'civicapi',
   }
 })
