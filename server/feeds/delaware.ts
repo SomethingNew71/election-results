@@ -56,7 +56,13 @@ export function parseDelaware(rows: DelawareRow[]): FeedRace[] {
     race.byType!.votes.push(VOTE_TYPES.map(([field]) => count(row[field])))
   }
   // A dataset without the split columns gives no split, not a row of zeros.
-  if (!rows.some((r) => VOTE_TYPES.some(([field]) => field in r))) for (const race of byOffice.values()) delete race.byType
+  // Socrata leaves out null fields. A race with any split column missing gives no split, not a false 0.
+  const partial = new Set<string>()
+  for (const row of rows) {
+    const kind = delawareKind(row.office?.trim() ?? '')
+    if (kind && VOTE_TYPES.some(([field]) => row[field] == null)) partial.add(`${kind.kind}|${kind.district}`)
+  }
+  for (const key of partial) delete byOffice.get(key)!.byType
   return [...byOffice.values()]
 }
 

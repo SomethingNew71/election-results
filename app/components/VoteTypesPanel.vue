@@ -31,20 +31,20 @@ const rows = computed(() =>
           <thead>
             <tr class="kicker border-b border-rule text-left">
               <th class="py-1.5 pr-2 font-normal">Candidate</th>
-              <th v-for="t in shown" :key="t.name" class="py-1.5 pl-2 text-right font-normal">{{ t.name }}</th>
+              <th v-for="t in shown" :key="t.i" class="py-1.5 pl-2 text-right font-normal">{{ t.name }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="r in rows" :key="r.name" class="border-b border-rule/60 last:border-0">
               <td class="py-1.5 pr-2">{{ r.name }}</td>
-              <td v-for="t in shown" :key="t.name" class="num py-1.5 pl-2 text-right">
+              <td v-for="t in shown" :key="t.i" class="num py-1.5 pl-2 text-right">
                 {{ formatShare(r.votes[t.i]! / typeTotals[t.i]!) }}
                 <span class="text-muted block text-xs">{{ formatNumber(r.votes[t.i]!) }}</span>
               </td>
             </tr>
             <tr class="kicker">
               <td class="pt-2 pr-2">Share of counted</td>
-              <td v-for="t in shown" :key="t.name" class="num pt-2 pl-2 text-right">
+              <td v-for="t in shown" :key="t.i" class="num pt-2 pl-2 text-right">
                 {{ formatShare(typeTotals[t.i]! / total) }}
                 <span class="text-muted block text-xs normal-case">{{ formatNumber(typeTotals[t.i]!) }}</span>
               </td>
@@ -56,7 +56,8 @@ const rows = computed(() =>
     </template>
     <p class="text-muted mt-3 text-xs">
       Vote types use the state's own labels. States count some types before others, so the lead can move as each type is added. This
-      total can differ from the count above when the state feed is ahead of or behind civicAPI.
+      split is fetched separately: it can be up to a minute behind the count above, and the state's types may not include every
+      ballot.
     </p>
   </section>
 </template>
