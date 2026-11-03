@@ -36,6 +36,25 @@ export interface FeedRace {
   unitLabel: string
   /** County breakdown; `votes` follows the order of `candidates`. */
   regions?: FeedRegion[]
+  /** Votes by vote type when the feed gives them inline. */
+  byType?: VoteTypeCounts
+  /** The feed's own id for this contest, for a per-contest vote-type request. */
+  ref?: string
+}
+
+/** Votes by vote type ("Early Voting", "Election Day"), as the state labels them. */
+export interface VoteTypeCounts {
+  types: string[]
+  /** One row per candidate, in the order of the feed race's `candidates`; one column per type. */
+  votes: number[][]
+}
+
+export interface VoteTypeBreakdown extends VoteTypeCounts {
+  /** The state's candidate names, one per row of `votes`. */
+  candidates: string[]
+  source: string
+  sourceUrl: string
+  checkedAt: string
 }
 
 export interface FeedRegion {
@@ -110,4 +129,6 @@ export interface RaceDetail extends RaceSummary, Freshness {
   testData: boolean
   disputed: boolean
   regions: RegionResult[]
+  /** The state's count split by vote type, when its feed publishes one. */
+  voteTypes: VoteTypeBreakdown | null
 }

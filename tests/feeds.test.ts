@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { parseDelaware } from '../server/feeds/delaware'
 import { parseOhio } from '../server/feeds/ohio'
-import { parseTally, stripPartyPrefix, tallyKind } from '../server/feeds/tally'
-import { parseVirginia, virginiaKind } from '../server/feeds/virginia'
+import { alignByName } from '../server/feeds/http'
+import { parseTally, parseTallyBreakdown, stripPartyPrefix, tallyKind } from '../server/feeds/tally'
+import { parseVirginia, parseVirginiaBreakdown, virginiaKind } from '../server/feeds/virginia'
+import type { FeedRace } from '../shared/types'
 
 const en = (text: string) => [{ languageId: 'en', text }]
 
@@ -147,5 +149,87 @@ describe('version fingerprints', () => {
     const race = (votes: number) => [{ state: 'OH', kind: 'senate', district: null, candidates: [{ name: 'A', votes }] }]
     expect(countsFingerprint(race(100))).not.toBe(countsFingerprint(race(95)))
     expect(countsFingerprint(race(100))).toBe(countsFingerprint(race(100)))
+  })
+})
+
+describe('vote types', () => {
+  const race = (names: string[]): FeedRace => ({
+    state: 'XX',
+    kind: 'senate',
+    district: null,
+    candidates: names.map((name) => ({ name, votes: 0 })),
+    unitsReporting: 0,
+    unitsTotal: 0,
+    unitLabel: '',
+  })
+
+  it('lines rows up by name and sums write-ins', () => {
+    const rows = [
+      { name: 'B', writeIn: false, votes: [3, 4] },
+      { name: 'A', writeIn: false, votes: [1, 2] },
+      { name: 'x', writeIn: true, votes: [1, 0] },
+      { name: 'y', writeIn: true, votes: [0, 5] },
+    ]
+    expect(alignByName([{ name: 'A' }, { name: 'B' }, { name: 'Write-in' }], rows, 2)).toEqual([[1, 2], [3, 4], [1, 5]])
+    expect(alignByName([{ name: 'A' }, { name: 'C' }], rows, 2)).toBeNull()
+  })
+
+  it('reads Delaware columns in candidate order', () => {
+    const [r] = parseDelaware([
+      { office: 'U.S. Senator', candidate_name: 'A', total_votes: '1,010', machine_votes: '1,000', early_votes: '7', absentee_votes: '3' },
+      { office: 'U.S. Senator', candidate_name: 'B', total_votes: '20', machine_votes: '10', early_votes: '5', absentee_votes: '5' },
+    ])
+    expect(r!.byType).toEqual({ types: ['Machine', 'Early', 'Absentee'], votes: [[1000, 7, 3], [10, 5, 5]] })
+    expect(parseDelaware([{ office: 'U.S. Senator', candidate_name: 'A', total_votes: '1' }])[0]!.byType).toBeUndefined()
+  })
+
+  it('reads Virginia vote groups', () => {
+    const g = (name: string, voteCount: number) => ({ groupName: en(name), voteCount })
+    const split = parseVirginiaBreakdown(race(['A', 'B', 'Write-in']), {
+      ballotItemWithBreakdown: {
+        summaryResults: {
+          ballotOptions: [
+            { name: en('A'), isWriteIn: false, groupResults: [g('Early Voting', 5), g('Election Day', 6)] },
+            { name: en('B'), isWriteIn: false, groupResults: [g('Election Day', 9), g('Early Voting', 1)] },
+            { name: en('Write In'), isWriteIn: true, groupResults: [g('Early Voting', 1), g('Election Day', 0)] },
+          ],
+        },
+      },
+    })
+    expect(split).toEqual({ types: ['Early Voting', 'Election Day'], votes: [[5, 6], [1, 9], [1, 0]] })
+    expect(parseVirginiaBreakdown(race(['A']), { ballotItemWithBreakdown: null })).toBeNull()
+  })
+
+  it('reads Tally vote buckets with names from the election info', () => {
+    const v = (a: number, b: number) => [
+      { voteTypeID: 't1', votes: a },
+      { voteTypeID: 't2', votes: b },
+    ]
+    const split = parseTallyBreakdown(
+      race(['Tom Cotton', 'Jane Doe', 'Write-in']),
+      { response: { choices: [{ choiceID: 'c2', votes: v(4, 5) }, { choiceID: 'c1', votes: v(1, 2) }], writeinChoices: [{ choiceID: 'w', votes: v(0, 1) }] } },
+      {
+        contestName: 'U.S. Senate',
+        choices: [
+          { id: 'c1', name: 'REP Tom Cotton', isWriteIn: false },
+          { id: 'c2', name: 'DEM Jane Doe', isWriteIn: false },
+        ],
+      },
+      new Map([
+        ['t1', 'Absentee'],
+        ['t2', 'Election Day'],
+      ]),
+    )
+    expect(split).toEqual({ types: ['Absentee', 'Election Day'], votes: [[1, 2], [4, 5], [0, 1]] })
+  })
+
+  it('gives no split when the feed has one vote type', () => {
+    const split = parseTallyBreakdown(
+      race(['A']),
+      { response: { choices: [{ choiceID: 'c1', votes: [{ voteTypeID: 't1', votes: 3 }] }] } },
+      { contestName: 'U.S. Senate', choices: [{ id: 'c1', name: 'A', isWriteIn: false }] },
+      new Map(),
+    )
+    expect(split).toBeNull()
   })
 })
