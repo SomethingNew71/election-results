@@ -50,6 +50,7 @@ export interface FeedMeta {
   source: string
   sourceUrl: string
   fetchedAt: string
+  checkedAt: string
   version: string | null
 }
 
@@ -86,7 +87,10 @@ function refreshFeed(f: Feed): Promise<void> {
     if (!/^\d+$/.test(ver.data)) throw new Error(`${f.source}: unexpected version "${ver.data.slice(0, 40)}"`)
     const version = Number(ver.data)
     const prev = latest.get(f.state)
-    if (prev && version <= prev.version) return
+    if (prev && version <= prev.version) {
+      prev.meta.checkedAt = new Date(ver.fetchedAt).toISOString()
+      return
+    }
 
     const res = await fetch(`${base}/${version}/json/en/summary.json`, {
       headers: { accept: 'application/json', 'user-agent': USER_AGENT },
@@ -97,7 +101,13 @@ function refreshFeed(f: Feed): Promise<void> {
     latest.set(f.state, {
       version,
       races,
-      meta: { source: f.source, sourceUrl: `${base}/`, fetchedAt: new Date().toISOString(), version: String(version) },
+      meta: {
+        source: f.source,
+        sourceUrl: `${base}/`,
+        fetchedAt: new Date().toISOString(),
+        checkedAt: new Date(ver.fetchedAt).toISOString(),
+        version: String(version),
+      },
     })
   })()
     .catch((err) => {

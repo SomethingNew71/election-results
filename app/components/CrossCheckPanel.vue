@@ -4,6 +4,7 @@ import type { CrossCheck } from '#shared/types'
 const props = defineProps<{ check: CrossCheck }>()
 
 const gap = computed(() => props.check.feedTotal - props.check.civicTotal)
+const now = useClock()
 const rows = computed(() => [...props.check.differences].sort((a, b) => Math.max(b.civic, b.feed) - Math.max(a.civic, a.feed)))
 </script>
 
@@ -13,6 +14,9 @@ const rows = computed(() => [...props.check.differences].sort((a, b) => Math.max
     <p class="text-muted mt-1 text-xs">
       <a :href="check.sourceUrl" class="underline underline-offset-2 hover:text-ink" target="_blank" rel="noopener">{{ check.source }}</a>
       · {{ check.unitsReporting }} of {{ check.unitsTotal }} counties reporting<template v-if="check.version"> · version {{ check.version }}</template>
+    </p>
+    <p class="text-muted num mt-1 text-xs">
+      State feed checked {{ formatAge(ageOf(check.checkedAt, now)) }} · this version downloaded {{ formatAge(ageOf(check.fetchedAt, now)) }}
     </p>
 
     <p class="mt-3 rounded border border-rule bg-paper p-2 text-sm">

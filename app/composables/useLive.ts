@@ -9,20 +9,18 @@ export const REFRESH_MS = 30_000
  */
 export function useLive<T extends Freshness>(url: MaybeRefOrGetter<string>, key: MaybeRefOrGetter<string>) {
   const result = useFetch<T>(url, { key, watch: [() => toValue(url)] })
-  const now = ref(Date.now())
+  const now = useClock()
 
   onMounted(() => {
     const refresher = setInterval(() => {
       if (document.visibilityState === 'visible') result.refresh()
     }, REFRESH_MS)
-    const ticker = setInterval(() => (now.value = Date.now()), 1000)
     const onVisible = () => {
       if (document.visibilityState === 'visible') result.refresh()
     }
     document.addEventListener('visibilitychange', onVisible)
     onBeforeUnmount(() => {
       clearInterval(refresher)
-      clearInterval(ticker)
       document.removeEventListener('visibilitychange', onVisible)
     })
   })
@@ -34,6 +32,31 @@ export function useLive<T extends Freshness>(url: MaybeRefOrGetter<string>, key:
   /** True when the data is old enough that users should be told. */
   const isOld = computed(() => Boolean(result.data.value?.stale) || (dataAge.value ?? 0) > 120)
   return { ...result, dataAge, isOld }
+}
+
+const clock = ref(0)
+let clockStarted = false
+
+/**
+ * Current time, updated every second in the browser. One timer for the whole
+ * page. The browser starts from the server's render time, so ages match
+ * during hydration, then moves to the real time on the first tick.
+ */
+export function useClock(): Readonly<Ref<number>> {
+  const renderedAt = useState('rendered-at', () => Date.now())
+  // On the server a module-level ref would hold the time the module loaded.
+  if (import.meta.server) return ref(renderedAt.value)
+  if (!clockStarted) {
+    clockStarted = true
+    clock.value = renderedAt.value
+    setInterval(() => (clock.value = Date.now()), 1000)
+  }
+  return clock
+}
+
+/** Seconds since an ISO time, or null. */
+export function ageOf(iso: string | null | undefined, now: number): number | null {
+  return iso ? Math.max(0, Math.round((now - Date.parse(iso)) / 1000)) : null
 }
 
 export function formatAge(seconds: number | null): string {
