@@ -10,10 +10,10 @@ const archived = useArchive()
         <div class="font-display text-3xl font-bold tracking-tight sm:text-4xl">Election Night Results</div>
       </NuxtLink>
       <div class="max-w-sm text-sm">
-        <p class="text-muted">Live vote counts and arithmetic estimates. No ratings, no endorsements, no race calls of our own.</p>
+        <p class="text-muted">Live vote counts and arithmetic estimates. No ratings, endorsements or race calls of our own.</p>
         <nav class="mt-1 flex gap-3" aria-label="Pages">
           <NuxtLink to="/" class="underline-offset-2 hover:underline" active-class="font-semibold" exact-active-class="font-semibold">Results</NuxtLink>
-          <NuxtLink to="/forecast" class="text-muted underline-offset-2 hover:text-ink hover:underline" active-class="font-semibold !text-ink">civicAPI forecast</NuxtLink>
+          <NuxtLink v-if="!archived" to="/forecast" class="text-muted underline-offset-2 hover:text-ink hover:underline" active-class="font-semibold !text-ink">civicAPI forecast</NuxtLink>
         </nav>
       </div>
     </header>

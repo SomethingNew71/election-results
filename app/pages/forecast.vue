@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import type { ForecastData, RaceKind } from '#shared/types'
+import type { ForecastData, ForecastRace, RaceKind } from '#shared/types'
 import type { StateFill } from '~/components/UsMap.vue'
 import { CHAMBER_SEATS, ratingRank, ratingStyle } from '#shared/utils/forecast'
 import { partyColor } from '#shared/utils/parties'
+import { formatSnapshot } from '~/composables/useLive'
 import { stateName } from '#shared/utils/states'
 
 const route = useRoute()
@@ -24,10 +25,11 @@ function setQuery(patch: Record<string, string | null>) {
   router.replace({ query })
 }
 
-// The forecast changes a few times a day at most; no live polling.
-const { data, error, status } = await useFetch<ForecastData>('/api/forecast', { key: 'forecast' })
+// The forecast changes a few times a day at most; no live polling. Lazy, so a slow civicAPI shows "Loading…" instead of blocking navigation.
+const { data, error, status } = useFetch<ForecastData>('/api/forecast', { key: 'forecast', lazy: true })
 
 const chamber = computed(() => data.value?.chambers.find((c) => c.kind === kind.value) ?? null)
+const chamberMissing = computed(() => Boolean(data.value?.missing.includes(kind.value)))
 const unit = computed(() => (kind.value === 'governor' ? 'governorships' : 'seats'))
 const D = partyColor('Democratic')
 const R = partyColor('Republican')
@@ -38,7 +40,7 @@ const problems = computed(() => {
   if (!c) return []
   const out: string[] = []
   const seats = CHAMBER_SEATS[c.kind]
-  const sum = c.totals.dem + c.totals.rep + c.totals.tossup + c.totals.ind
+  const sum = c.totals ? c.totals.dem + c.totals.rep + c.totals.tossup + c.totals.ind : seats
   if (sum !== seats) out.push(`The totals add up to ${sum}; there are ${seats}.`)
   if (c.probDem !== null && c.probRep !== null && c.probDem + c.probRep > 100.5) {
     out.push(`The two majority chances add up to ${formatNum(c.probDem + c.probRep)}%, which is more than 100%.`)
@@ -60,7 +62,8 @@ const fills = computed<Record<string, StateFill>>(() => {
   if (!chamber.value || kind.value === 'house') return out
   for (const r of chamber.value.races) {
     const s = ratingStyle(r.rating)
-    out[r.state] = { mode: 'result', color: s.color, opacity: s.opacity, title: `${stateName(r.state)}: ${r.rating} · D ${formatNum(r.dem)}% · R ${formatNum(r.rep)}%` }
+    const ind = (r.ind ?? 0) >= 1 ? ` · I ${formatNum(r.ind)}%` : ''
+    out[r.state] = { mode: 'result', color: s.color, opacity: s.opacity, title: `${stateName(r.state)}: ${r.rating} · D ${formatNum(r.dem)}% · R ${formatNum(r.rep)}%${ind} (forecast)` }
   }
   return out
 })
@@ -74,21 +77,31 @@ const races = computed(() => {
     .sort((a, b) => gap(a) - gap(b) || a.key.localeCompare(b.key))
 })
 /** Gap between the two highest win chances, so a race with a strong independent sorts by its real contest. */
-function gap(r: { dem: number; rep: number; ind: number }) {
-  const [x = 0, y = 0] = [r.dem, r.rep, r.ind].sort((p, q) => q - p)
+function gap(r: { dem: number | null; rep: number | null; ind: number | null }) {
+  const [x = 0, y = 0] = [r.dem ?? 0, r.rep ?? 0, r.ind ?? 0].sort((p, q) => q - p)
   return x - y
 }
 const weightSum = computed(() => Math.round(Object.values(chamber.value?.weights ?? {}).reduce((n, w) => n + w, 0) * 100))
-const showInd = computed(() => (chamber.value?.races ?? []).some((r) => r.ind >= 1))
+const showInd = computed(() => (chamber.value?.races ?? []).some((r) => (r.ind ?? 0) >= 1))
 const LIMIT = 60
 const showAll = ref(false)
 watch([kind, selected, query], () => (showAll.value = false))
 
 const maxBin = computed(() => Math.max(0.0001, ...(chamber.value?.distribution ?? []).map((b) => b.probability)))
 
-function formatNum(n: number) {
+function formatNum(n: number | null) {
+  if (n === null) return '–'
   return Number.isInteger(n) ? String(n) : n.toFixed(1)
 }
+function pct(n: number | null) {
+  return n === null ? '–' : `${formatNum(n)}%`
+}
+const CHANCE_OF: Record<string, 'dem' | 'rep' | 'ind'> = { Democratic: 'dem', Republican: 'rep', Independent: 'ind' }
+/** Named candidates, plus a note for a party civicAPI gives a chance without naming anyone. */
+function shownCandidates(r: ForecastRace) {
+  return r.candidates.filter((c) => c.name || (r[CHANCE_OF[c.party]!] ?? 0) >= 0.1)
+}
+const national = computed(() => data.value?.chambers.find((c) => c.kind === 'house')?.national ?? null)
 function label(key: string) {
   return key.length === 2 ? stateName(key) : key
 }
@@ -100,7 +113,7 @@ const SOURCE_LABEL: Record<string, string> = {
   outside_spending: 'Outside spending',
 }
 
-useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} forecast — Election Night` })
+useHead({ title: () => `civicAPI ${KINDS.find((k) => k.kind === kind.value)!.label} forecast — Election Night` })
 </script>
 
 <template>
@@ -125,7 +138,7 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} forec
       >
         {{ k.label }}
       </button>
-      <span v-if="chamber" class="text-muted num ml-auto hidden self-center text-xs sm:inline">civicAPI forecast of {{ chamber.updated }}</span>
+      <span v-if="data" class="text-muted num ml-auto hidden self-center text-xs sm:inline">Fetched {{ formatSnapshot(data.dataAsOf) }}</span>
     </nav>
 
     <div v-if="data?.stale" role="status" class="mt-4 rounded border border-ink bg-panel px-4 py-3 text-sm">
@@ -136,11 +149,12 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} forec
       <p class="text-muted mt-1 text-sm">civicAPI did not respond. Reload the page to try again.</p>
     </div>
     <p v-else-if="status === 'pending' && !data" class="text-muted mt-8 text-sm">Loading…</p>
+    <p v-else-if="chamberMissing" class="mt-8 rounded border border-rule bg-panel p-6 text-sm">civicAPI did not answer for this chamber. The other tabs may still work.</p>
 
     <template v-else-if="chamber">
       <section class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div class="rounded-lg border border-rule bg-panel p-5">
-          <div class="kicker">Chance of a majority ({{ chamber.majorityThreshold }} {{ unit }})</div>
+          <div class="kicker">civicAPI's chance of a majority ({{ chamber.majorityThreshold }} {{ unit }})</div>
           <div class="mt-2 flex flex-wrap items-baseline gap-x-8 gap-y-2">
             <div v-if="chamber.probDem !== null">
               <span class="num font-display text-4xl font-bold" :style="{ color: D }">{{ formatNum(chamber.probDem) }}%</span>
@@ -163,11 +177,12 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} forec
             </div>
           </dl>
           <p class="text-muted mt-2 text-xs">
-            <template v-if="chamber.seats">From {{ chamber.seats.simulations.toLocaleString('en-US') }} simulations run by civicAPI. </template>Forecast of
-            {{ chamber.updated }}.
+            <template v-if="chamber.seats?.simulations">From {{ chamber.seats.simulations.toLocaleString('en-US') }} simulations run by civicAPI. </template>
+            <template v-if="chamber.chamberRating">civicAPI rates the chamber {{ chamber.chamberRating }}. </template>
+            <template v-if="chamber.updated">Forecast of {{ chamber.updated }}; fetched {{ formatSnapshot(data!.dataAsOf) }}.</template>
           </p>
 
-          <div class="mt-5">
+          <div v-if="chamber.totals" class="mt-5">
             <div class="kicker">Totals as published</div>
             <p class="num mt-1 text-sm">
               <span :style="{ color: D }" class="font-semibold">D {{ chamber.totals.dem }}</span> ·
@@ -204,7 +219,10 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} forec
           </div>
 
           <template v-if="kind !== 'house'">
-            <UsMap class="mt-5" :fills="fills" :selected="selected" @select="(s) => setQuery({ state: selected === s ? null : s })" />
+            <div class="relative mt-5">
+              <UsMap :fills="fills" :selected="selected" @select="(s) => setQuery({ state: selected === s ? null : s })" />
+              <span class="kicker pointer-events-none absolute top-0 left-0 rounded border border-dashed border-rule bg-panel/80 px-2 py-1">civicAPI forecast · not results</span>
+            </div>
             <p class="text-muted mt-2 text-xs">Colour shows the forecast rating. Darker = safer. Grey = toss-up. Blank = no race. Select a state to filter the table.</p>
           </template>
 
@@ -214,9 +232,9 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} forec
               <div
                 v-for="b in chamber.distribution"
                 :key="b.seats"
-                class="flex-1 rounded-t-sm"
-                :title="`${b.seats} seats: ${formatNum(b.probability * 100)}% of simulations`"
-                :style="{ height: `${(b.probability / maxBin) * 100}%`, minHeight: b.probability > 0 ? '2px' : '0', backgroundColor: b.control === 'democrat' ? D : b.control === 'republican' ? R : 'var(--color-muted, #8a8a8a)' }"
+                class="flex-1 rounded-t-sm bg-muted/60"
+                :title="`${b.seats} ${unit}: ${formatNum(b.probability)}% of simulations`"
+                :style="{ height: `${(b.probability / maxBin) * 100}%`, minHeight: b.probability > 0 ? '2px' : '0' }"
               />
             </div>
             <div class="num text-muted mt-1 flex justify-between text-xs">
@@ -225,20 +243,25 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} forec
             </div>
           </div>
 
-          <div v-if="kind === 'house' && data?.national" class="mt-5 grid gap-3 text-sm sm:grid-cols-3">
-            <div v-if="data.national.popularVote" class="rounded border border-rule bg-paper p-3">
-              <div class="kicker">Projected popular vote</div>
-              <p class="num mt-1 font-semibold"><span :style="{ color: D }">D {{ data.national.popularVote.dem }}%</span> · <span :style="{ color: R }">R {{ data.national.popularVote.rep }}%</span></p>
-              <p class="text-muted text-xs">{{ data.national.popularVote.districts }} districts · {{ data.national.popularVote.sources.length }} sources</p>
+          <div v-if="kind === 'house' && national" class="mt-5 grid gap-3 text-sm sm:grid-cols-3">
+            <div v-if="national.popularVote" class="rounded border border-rule bg-paper p-3">
+              <div class="kicker">civicAPI popular-vote estimate</div>
+              <p class="num mt-1 font-semibold"><span :style="{ color: D }">D {{ national.popularVote.dem }}%</span> · <span :style="{ color: R }">R {{ national.popularVote.rep }}%</span></p>
+              <p class="text-muted text-xs">
+                <template v-if="national.popularVote.margin !== null">Margin {{ formatNum(national.popularVote.margin) }} points · </template>{{ national.popularVote.districts }} districts ·
+                {{ national.popularVote.sources.join(', ') }}
+              </p>
             </div>
-            <div v-if="data.national.seatShare" class="rounded border border-rule bg-paper p-3">
-              <div class="kicker">Projected seat share</div>
-              <p class="num mt-1 font-semibold"><span :style="{ color: D }">D {{ data.national.seatShare.dem }}%</span> · <span :style="{ color: R }">R {{ data.national.seatShare.rep }}%</span></p>
+            <div v-if="national.seatShare" class="rounded border border-rule bg-paper p-3">
+              <div class="kicker">civicAPI seat-share estimate</div>
+              <p class="num mt-1 font-semibold"><span :style="{ color: D }">D {{ national.seatShare.dem }}%</span> · <span :style="{ color: R }">R {{ national.seatShare.rep }}%</span></p>
             </div>
-            <div v-if="data.national.genericBallot" class="rounded border border-rule bg-paper p-3">
+            <div v-if="national.genericBallot" class="rounded border border-rule bg-paper p-3">
               <div class="kicker">Generic ballot polling</div>
-              <p class="num mt-1 font-semibold"><span :style="{ color: D }">D {{ data.national.genericBallot.dem }}%</span> · <span :style="{ color: R }">R {{ data.national.genericBallot.rep }}%</span></p>
-              <p class="text-muted text-xs">{{ data.national.genericBallot.polls }} polls</p>
+              <p class="num mt-1 font-semibold"><span :style="{ color: D }">D {{ national.genericBallot.dem }}%</span> · <span :style="{ color: R }">R {{ national.genericBallot.rep }}%</span></p>
+              <p class="text-muted text-xs">
+                {{ national.genericBallot.polls }} polls<template v-if="national.genericBallot.confidence !== null"> · civicAPI confidence {{ formatNum(national.genericBallot.confidence) }}</template>
+              </p>
             </div>
           </div>
         </div>
@@ -290,16 +313,19 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} forec
                   <NuxtLink v-if="r.raceId" :to="`/race/${r.raceId}`" class="font-semibold underline-offset-2 hover:underline">{{ label(r.key) }}</NuxtLink>
                   <span v-else class="font-semibold">{{ label(r.key) }}</span>
                   <span class="text-muted block text-xs">
-                    <template v-for="(c, i) in r.candidates" :key="c.party">{{ i ? ' · ' : '' }}<span :style="{ color: partyColor(c.party) }">●</span> {{ c.name }}</template>
+                    <template v-for="(c, i) in shownCandidates(r)" :key="c.party"
+                      >{{ i ? ' · ' : '' }}<span :style="{ color: partyColor(c.party) }">●</span>
+                      <template v-if="c.name">{{ c.name }}</template><em v-else>no {{ c.party }} candidate named</em></template
+                    >
                   </span>
                 </td>
                 <td class="py-1.5 pr-2 whitespace-nowrap">
                   <span class="inline-block size-2.5 rounded-sm" :style="{ backgroundColor: ratingStyle(r.rating).color, opacity: ratingStyle(r.rating).opacity + 0.15 }" />
                   {{ r.rating }}
                 </td>
-                <td class="num py-1.5 pl-2 text-right">{{ formatNum(r.dem) }}%</td>
-                <td class="num py-1.5 pl-2 text-right">{{ formatNum(r.rep) }}%</td>
-                <td v-if="showInd" class="num py-1.5 pl-2 text-right">{{ r.ind ? `${formatNum(r.ind)}%` : '–' }}</td>
+                <td class="num py-1.5 pl-2 text-right">{{ pct(r.dem) }}</td>
+                <td class="num py-1.5 pl-2 text-right">{{ pct(r.rep) }}</td>
+                <td v-if="showInd" class="num py-1.5 pl-2 text-right">{{ r.ind ? pct(r.ind) : '–' }}</td>
               </tr>
             </tbody>
           </table>

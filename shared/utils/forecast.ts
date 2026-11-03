@@ -1,6 +1,9 @@
 import { NEUTRAL_COLOR, partyColor } from './parties'
 
-/** civicAPI's rating scale, from most Democratic to most Republican. */
+/**
+ * civicAPI's rating scale, from most Democratic to most Republican. Only
+ * "Tilt I" has been seen for independents; other I ratings sort with toss-ups.
+ */
 export const RATING_ORDER = [
   'Safe D',
   'Likely D',

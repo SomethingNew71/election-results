@@ -139,38 +139,44 @@ export interface ForecastRace {
   key: string
   state: string
   rating: string
-  /** Win chances in percent, as published. */
-  dem: number
-  rep: number
-  ind: number
+  /** Win chances in percent, as published; null when civicAPI gives none. */
+  dem: number | null
+  rep: number | null
+  ind: number | null
   incumbentParty: string
+  /** Names per party; '' when civicAPI names no candidate for a party it still gives a chance. */
   candidates: { party: string; name: string }[]
   /** Our race page, when exactly one tracked race matches. */
   raceId: number | null
 }
 
+export interface ForecastNational {
+  popularVote: { dem: number; rep: number; margin: number | null; districts: number; sources: string[] } | null
+  seatShare: { dem: number; rep: number } | null
+  genericBallot: { dem: number; rep: number; polls: number; confidence: number | null } | null
+}
+
 export interface ForecastChamber {
   kind: RaceKind
   updated: string
-  totals: { dem: number; rep: number; tossup: number; ind: number }
+  totals: { dem: number; rep: number; tossup: number; ind: number } | null
   majorityThreshold: number
   /** Percent. */
   probDem: number | null
   probRep: number | null
-  seats: { simulations: number; expectedDem: number; expectedRep: number; dem: [number, number, number]; rep: [number, number, number] } | null
-  distribution: { seats: number; probability: number; control: string }[]
+  /** civicAPI's rating of the chamber as a whole ("Safe D"). */
+  chamberRating: string | null
+  seats: { simulations: number | null; expectedDem: number; expectedRep: number; dem: [number, number, number]; rep: [number, number, number] } | null
+  /** `probability` is already a percent of simulations (the bins sum to 100). */
+  distribution: { seats: number; probability: number; control?: string }[]
   weights: Record<string, number>
   sources: Record<string, string[]>
   races: ForecastRace[]
-}
-
-export interface ForecastNational {
-  popularVote: { dem: number; rep: number; districts: number; sources: string[] } | null
-  seatShare: { dem: number; rep: number } | null
-  genericBallot: { dem: number; rep: number; polls: number } | null
+  national: ForecastNational | null
 }
 
 export interface ForecastData extends Freshness {
   chambers: ForecastChamber[]
-  national: ForecastNational | null
+  /** Chambers civicAPI did not answer for. */
+  missing: RaceKind[]
 }
