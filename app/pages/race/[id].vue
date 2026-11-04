@@ -123,7 +123,10 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
               <span class="font-semibold">{{ formatNumber(inf.counted) }}</span> <span class="text-muted">votes</span>
               <template v-if="pollsClose"><span class="text-muted"> · polls close {{ pollsClose }}</span></template>
             </div>
-            <StatusTag :status="inf.status" :color="inf.leader?.color" />
+            <span class="flex flex-wrap items-center gap-1">
+              <FlipTag :race="data" />
+              <StatusTag :status="inf.status" :color="inf.leader?.color" />
+            </span>
           </div>
           <CandidateRows class="mt-5" :candidates="data.candidates" :limit="12" />
 
