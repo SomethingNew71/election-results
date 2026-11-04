@@ -28,6 +28,11 @@ const feed = (candidates: { name: string; votes: number }[], unitsReporting = 50
 })
 
 describe('personKey', () => {
+  it('ignores accents', () => {
+    expect(personKey('Nanette Barragán')).toBe(personKey('Nanette Diaz Barragan'))
+    expect(personKey('Ben Ray Luján')).toBe('lujan')
+  })
+
   it('keys tickets on the first person', () => {
     expect(personKey('Zach Lahn and Derek Wulf')).toBe('lahn')
     expect(personKey('Victor Marx / George Washington Markert')).toBe('marx')

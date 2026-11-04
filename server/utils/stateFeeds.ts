@@ -4,6 +4,24 @@ import { delaware } from '../feeds/delaware'
 import { ohio } from '../feeds/ohio'
 import { arkansas, missouri } from '../feeds/tally'
 import { virginia } from '../feeds/virginia'
+import { ca } from '../feeds/ca'
+import { ct } from '../feeds/ct'
+import { fl } from '../feeds/fl'
+import { ga } from '../feeds/ga'
+import { id } from '../feeds/id'
+import { in_ } from '../feeds/in_'
+import { la } from '../feeds/la'
+import { md } from '../feeds/md'
+import { nc } from '../feeds/nc'
+import { ne } from '../feeds/ne'
+import { nm } from '../feeds/nm'
+import { or_ } from '../feeds/or'
+import { pa } from '../feeds/pa'
+import { sc } from '../feeds/sc'
+import { sd } from '../feeds/sd'
+import { ut } from '../feeds/ut'
+import { vt } from '../feeds/vt'
+import { wa } from '../feeds/wa'
 
 /**
  * Official state results. Clarity ENR (Scytl) is read here; other vendors'
@@ -129,7 +147,32 @@ function clarityAdapter(f: (typeof CLARITY_FEEDS)[number]): FeedAdapter {
  * Every official feed, one per state. Adding a state: write an adapter in
  * server/feeds/, add a parser test, and list it here.
  */
-const ADAPTERS: FeedAdapter[] = [...CLARITY_FEEDS.map(clarityAdapter), ohio, arkansas, missouri, virginia, delaware]
+const ADAPTERS: FeedAdapter[] = [
+  ...CLARITY_FEEDS.map(clarityAdapter),
+  ohio,
+  arkansas,
+  missouri,
+  virginia,
+  delaware,
+  ca,
+  ct,
+  fl,
+  ga,
+  id,
+  in_,
+  la,
+  md,
+  nc,
+  ne,
+  nm,
+  or_,
+  pa,
+  sc,
+  sd,
+  ut,
+  vt,
+  wa,
+]
 
 export function feedAdapter(state: string): FeedAdapter | undefined {
   return ADAPTERS.find((f) => f.state === state)

@@ -9,7 +9,7 @@
  *   bun scripts/watch.ts [base-url]
  */
 const BASE = process.argv[2] ?? 'https://election-results.classicminidiy.workers.dev'
-const FEED_STATES = ['AR', 'CO', 'DE', 'IA', 'MO', 'OH', 'VA']
+const FEED_STATES = ['AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'IA', 'ID', 'IN', 'LA', 'MD', 'MO', 'NC', 'NE', 'NM', 'OH', 'OR', 'PA', 'SC', 'SD', 'UT', 'VA', 'VT', 'WA']
 
 type Race = {
   id: number
