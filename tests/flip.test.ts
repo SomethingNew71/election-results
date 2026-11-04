@@ -9,8 +9,8 @@ const race = (over: Partial<FlipRace>, party: string, winner = true): FlipRace =
   state: 'NC',
   district: null,
   candidates: [
-    { party, winner },
-    { party: 'Other', winner: false },
+    { party, votes: 60, winner },
+    { party: 'Other', votes: 40, winner: false },
   ],
   ...over,
 })
@@ -38,8 +38,27 @@ describe('flipOf', () => {
   it('is silent for a nonpartisan winner, a territory, and a new House map', () => {
     expect(flipOf(race({}, 'Nonpartisan'))).toBeNull()
     expect(flipOf(race({ kind: 'governor', state: 'GU' }, 'Republican'))).toBeNull()
-    expect(flipOf(race({ kind: 'house', state: 'DC', district: 'DC-AL', delegate: true }, 'Republican'))).toBeNull()
+    expect(flipOf(race({ kind: 'house', state: 'VA', district: 'VA-02', delegate: true }, 'Democratic'))).toBeNull()
     expect(flipOf(race({ kind: 'house', state: 'TX', district: 'TX-09' }, 'Democratic'))).toBeNull()
+  })
+
+  it('is silent for any party label it does not know', () => {
+    for (const label of ['Write-In', 'DEM/NON', 'Democrat', 'Libertarian', 'Independent Party of Florida', 'Other Party', 'Unaffiliated']) {
+      expect(flipOf(race({}, label)), label).toBeNull()
+    }
+  })
+
+  it('is silent for a flag under 50% where a runoff or RCV can follow', () => {
+    const under = (over: Partial<FlipRace>) => ({
+      ...race(over, 'Democratic'),
+      candidates: [
+        { party: 'Democratic', votes: 49, winner: true },
+        { party: 'Republican', votes: 51, winner: false },
+      ],
+    })
+    expect(flipOf(under({ kind: 'governor', state: 'GA' }))).toBeNull()
+    expect(flipOf(under({ kind: 'senate', state: 'AK' }))).toBeNull()
+    expect(flipOf(under({}))?.to).toBe('Democratic')
   })
 
   it('reads at-large seats and the last district', () => {
@@ -63,14 +82,14 @@ describe('seat holder tables', () => {
 
   it('cover every race on the ballot once, except new maps', () => {
     const races = [...raceSeed.General, ...raceSeed.Statewide]
-    const house = new Set(races.filter((r) => r.type === 'House of Representatives' && r.province !== 'US').map((r) => r.district!))
-    const expected = [...house].filter((d) => !NEW_HOUSE_MAP.includes(d.slice(0, 2)))
+    const house = races.filter((r) => r.type === 'House of Representatives' && r.province !== 'US').map((r) => r.district!)
+    const expected = house.filter((d) => !NEW_HOUSE_MAP.includes(d.slice(0, 2)))
     const listed = Object.entries(HOUSE_HOLDERS).flatMap(([st, letters]) =>
       [...letters].map((_, i) => (letters.length === 1 ? `${st}-AL` : `${st}-${String(i + 1).padStart(2, '0')}`)),
     )
     expect(listed.sort()).toEqual(expected.sort())
-    const state = (type: string) => new Set(races.filter((r) => r.type === type && /^[A-Z]{2}$/.test(r.province ?? '') && !['US', 'GU', 'MP', 'VI'].includes(r.province!)).map((r) => r.province))
-    expect([...state('US Senate')].sort()).toEqual(Object.keys(SENATE_HOLDERS).sort())
-    expect([...state('Governor')].sort()).toEqual(Object.keys(GOVERNOR_HOLDERS).sort())
+    const state = (type: string) => races.filter((r) => r.type === type && /^[A-Z]{2}$/.test(r.province ?? '') && !['US', 'GU', 'MP', 'VI'].includes(r.province!)).map((r) => r.province)
+    expect(state('US Senate').sort()).toEqual(Object.keys(SENATE_HOLDERS).sort())
+    expect(state('Governor').sort()).toEqual(Object.keys(GOVERNOR_HOLDERS).sort())
   })
 })

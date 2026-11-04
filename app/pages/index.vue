@@ -292,7 +292,7 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
                 </div>
                 <div>
                   <dt><span class="kicker inline-flex items-center rounded-full border border-ink px-2 py-0.5 !text-ink">Flip</span></dt>
-                  <dd class="text-muted mt-1">civicAPI has called this race for a party other than the one that held the seat going in. Not compared for territories, nonpartisan winners, or House seats in states with a new 2026 map (AL, CA, FL, LA, NC, OH, TN, TX, UT).</dd>
+                  <dd class="text-muted mt-1">civicAPI has called this race for a party other than the one that held the seat going in. Only major-party and independent winners are compared. Not compared for territories, a winner under 50% where a runoff or ranked choice can follow, or House seats in states with a new 2026 map (AL, CA, FL, LA, NC, OH, TN, TX, UT).</dd>
                 </div>
               </dl>
             </details>
