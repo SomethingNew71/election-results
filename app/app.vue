@@ -19,7 +19,7 @@ const archived = useArchive()
     <footer class="text-muted mt-12 border-t border-rule pt-6 text-xs leading-relaxed">
       <p>
         Results data from <a href="https://civicapi.org" class="underline underline-offset-2 hover:text-ink">civicAPI</a>, cross-checked
-        against official state results feeds where available (Arkansas, Colorado, Delaware, Iowa, Missouri, Ohio, Virginia). Colours
+        against official state results feeds in 25 states where available. Colours
         are fixed per party. "Called" means civicAPI has marked a winner; every other status is an estimate computed in your
         browser from the reported count.
       </p>

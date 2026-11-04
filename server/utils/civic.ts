@@ -1,4 +1,5 @@
 import type { Candidate, RaceKind, RaceSummary, RegionResult } from '#shared/types'
+import raceSeed from '../data/race-seed.json'
 
 const BASE = 'https://civicapi.org/api/v2'
 export const USER_AGENT = 'election-results-worker (+https://github.com/SomethingNew71/election-results)'
@@ -7,6 +8,9 @@ export const USER_AGENT = 'election-results-worker (+https://github.com/Somethin
 const TTL_MS = 20_000
 /** Past this age, stale data is an error instead of a fallback. */
 const MAX_STALE_MS = 10 * 60_000
+/** The race list is the page's skeleton: a labelled old copy beats an error page. */
+const LIST_MAX_STALE_MS = 24 * 3_600_000
+const maxStale = (key: string) => (/\/race\/search\?/.test(key) ? LIST_MAX_STALE_MS : MAX_STALE_MS)
 const TIMEOUT_MS = 8_000
 /** One Durable Object serves every reader, so this holds all ~510 race details at once. */
 const MAX_ENTRIES = 2_000
@@ -88,7 +92,7 @@ export async function cachedGet<T>(
       return { data, fetchedAt, stale: false }
     } catch (err) {
       const isNotFound = (err as { statusCode?: number }).statusCode === 404
-      if (hit && !isNotFound && Date.now() - hit.fetchedAt < MAX_STALE_MS) {
+      if (hit && !isNotFound && Date.now() - hit.fetchedAt < maxStale(key)) {
         console.warn(`${sourceName} refresh failed for ${url}; serving copy from ${new Date(hit.fetchedAt).toISOString()}`, err)
         return { data: hit.data, fetchedAt: hit.fetchedAt, stale: true }
       }
@@ -99,7 +103,7 @@ export async function cachedGet<T>(
     }
   })()
   if (!pending) inflight.set(key, request)
-  if (!hit || age >= MAX_STALE_MS) return request as Promise<Fetched<T>>
+  if (!hit || age >= maxStale(key)) return request as Promise<Fetched<T>>
 
   // A copy exists, so a slow or failing civicAPI never costs the reader an error.
   const background = request.catch(() => {})
@@ -222,15 +226,21 @@ export interface TrackedRaces {
   stale: boolean
 }
 
+const searchUrl = (scope: string) =>
+  `${BASE}/race/search?country=US&startDate=${ELECTION_DATE}&endDate=${ELECTION_DATE}&election_type=${scope}&limit=5000`
+
+// Every isolate and object starts with the bundled race list (scripts/build-race-seed.ts),
+// so a deploy during a civicAPI outage shows the ballot, marked stale, with the state feeds' counts.
+for (const scope of ['General', 'Statewide'] as const) {
+  remember(searchUrl(scope), { races: raceSeed[scope] }, Date.parse(raceSeed.capturedAt))
+}
+
 /** Senate, House and Governor races on today's ballot, from two search calls. */
 export async function trackedRaces(waitUntil?: WaitUntil): Promise<TrackedRaces> {
   const scopes = ['General', 'Statewide'] as const
   const results = await Promise.all(
     scopes.map((scope) =>
-      civicGet<{ races: CivicRace[] }>(
-        `/race/search?country=US&startDate=${ELECTION_DATE}&endDate=${ELECTION_DATE}&election_type=${scope}&limit=5000`,
-        waitUntil,
-      ),
+      cachedGet<{ races: CivicRace[] }>(searchUrl(scope), 'civicAPI', undefined, undefined, waitUntil),
     ),
   )
   const races: RaceSummary[] = []

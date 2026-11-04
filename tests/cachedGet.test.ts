@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cachedGet } from '../server/utils/civic'
+import raceSeed from '../server/data/race-seed.json'
 
 const json = (body: unknown) => new Response(JSON.stringify(body))
 const hang = () => new Promise<Response>(() => {})
@@ -93,5 +94,18 @@ describe('cachedGet without a usable copy', () => {
     await seed(url, 120_000)
     fetchMock.mockResolvedValueOnce(new Response('', { status: 404 }))
     await expect(cachedGet(url, 'test')).rejects.toMatchObject({ statusCode: 404 })
+  })
+})
+
+describe('the bundled race list', () => {
+  const url = 'https://civicapi.org/api/v2/race/search?country=US&startDate=2026-11-03&endDate=2026-11-03&election_type=General&limit=5000'
+
+  it('answers a cold start when civicAPI fails, marked stale, with its capture time', async () => {
+    vi.setSystemTime(Date.parse(raceSeed.capturedAt) + 60 * 60_000)
+    fetchMock.mockResolvedValueOnce(new Response('', { status: 502 }))
+    const got = await cachedGet<{ races: unknown[] }>(url, 'civicAPI')
+    expect(got.stale).toBe(true)
+    expect(got.fetchedAt).toBe(Date.parse(raceSeed.capturedAt))
+    expect(got.data.races).toHaveLength(raceSeed.General.length)
   })
 })

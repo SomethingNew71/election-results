@@ -8,6 +8,8 @@ import type { CrossCheck, FeedRace, RaceSummary, RegionResult } from '../types'
 export function personKey(name: string): string {
   const first = name.split(/\s+(?:\/|and|&)\s+/i)[0] ?? name
   const words = first
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
     .replace(/["“”'‘’(].*?["“”'‘’)]/g, ' ')
     .replace(/,/g, ' ')
     .split(/\s+/)

@@ -1,4 +1,4 @@
-import type { RaceDetail } from '#shared/types'
+import type { RaceDetail, RaceKind, RaceSummary } from '#shared/types'
 import type { CivicRaceDetail } from '../../utils/civic'
 
 export default defineEventHandler(async (event): Promise<RaceDetail | Response> => {
@@ -12,11 +12,20 @@ export default defineEventHandler(async (event): Promise<RaceDetail | Response> 
   // Only proxy races on today's ballot, so arbitrary ids cannot fill the cache.
   // In dev, past races (for example 5861, the finished 2025 VA governor race) are allowed for testing.
   const waitUntil = (p: Promise<unknown>) => event.waitUntil(p)
-  const [{ races }, feeds] = await Promise.all([trackedRaces(waitUntil), stateFeedRaces(waitUntil)])
+  const [{ races, fetchedAt: listFetchedAt }, feeds] = await Promise.all([trackedRaces(waitUntil), stateFeedRaces(waitUntil)])
   const tracked = races.find((r) => r.id === id)
   if (!tracked && !import.meta.dev) throw createError({ statusCode: 404, statusMessage: 'Race not tracked' })
 
-  const { data: d, fetchedAt, stale } = await civicGet<CivicRaceDetail>(`/race/${id}`, waitUntil)
+  const detail = civicGet<CivicRaceDetail>(`/race/${id}`, waitUntil)
+  waitUntil(detail.catch(() => {}))
+  const { data: d, fetchedAt, stale } = await Promise.race([
+    detail,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('race detail timed out')), DETAIL_WAIT_MS)),
+  ]).catch((err) => {
+    if (!tracked || err?.statusCode === 404) throw err
+    // No county data without civicAPI, but the list's counts and the state feed still answer.
+    return { data: detailFromSummary(tracked), fetchedAt: listFetchedAt, stale: true }
+  })
   const kind = kindOf(d.election_type)
   if (!kind) throw createError({ statusCode: 404, statusMessage: 'Race not tracked' })
   const base = {
@@ -75,4 +84,27 @@ function warnUnmatched(state: string, name: string): null {
 
 function countyKey(name: string): string {
   return name.toLowerCase().replace(/\bst\.?\s/g, 'saint ').replace(/\bcounty\b/g, '').replace(/[^a-z]/g, '')
+}
+
+/** A race page waits this long for civicAPI's detail when no copy exists. */
+const DETAIL_WAIT_MS = 3_000
+
+const ELECTION_TYPE: Record<RaceKind, string> = { senate: 'US Senate', governor: 'Governor', house: 'House of Representatives' }
+
+function detailFromSummary(r: RaceSummary): CivicRaceDetail {
+  return {
+    election_name: r.name,
+    election_type: ELECTION_TYPE[r.kind],
+    election_scope: '',
+    province: r.state,
+    district: r.district,
+    polls_close: null,
+    last_updated: null,
+    registered_voters: null,
+    percent_reporting: r.pct,
+    test_data: false,
+    is_disputed: false,
+    candidates: r.candidates,
+    region_results: null,
+  }
 }
