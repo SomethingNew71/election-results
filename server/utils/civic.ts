@@ -46,6 +46,12 @@ export type WaitUntil = (p: Promise<unknown>) => void
  * real age reaches the page through `dataAsOf`.
  */
 const SWR_MS = 90_000
+/**
+ * Past SWR_MS and up to MAX_STALE_MS, a request waits this long for the refresh,
+ * then gets the cached copy marked stale. It must stay under snapshot.ts's
+ * FORWARD_TIMEOUT_MS: an isolate that gives up on the object has no copy to serve.
+ */
+const REFRESH_WAIT_MS = 2_000
 
 /**
  * GET a URL with the per-isolate cache, request coalescing, a timeout,
@@ -68,10 +74,7 @@ export async function cachedGet<T>(
   }
 
   const pending = inflight.get(key)
-  if (pending && !(hit && age < SWR_MS)) return pending as Promise<Fetched<T>>
-  if (pending) return { data: hit!.data as T, fetchedAt: hit!.fetchedAt, stale: false }
-
-  const request = (async (): Promise<Fetched<unknown>> => {
+  const request = pending ?? (async (): Promise<Fetched<unknown>> => {
     try {
       const res = await fetch(url, {
         headers: { accept: 'application/json', 'user-agent': USER_AGENT },
@@ -95,12 +98,17 @@ export async function cachedGet<T>(
       inflight.delete(key)
     }
   })()
-  inflight.set(key, request)
-  if (hit && age < SWR_MS) {
-    waitUntil?.(request.catch(() => {}))
-    return { data: hit.data as T, fetchedAt: hit.fetchedAt, stale: false }
-  }
-  return request as Promise<Fetched<T>>
+  if (!pending) inflight.set(key, request)
+  if (!hit || age >= MAX_STALE_MS) return request as Promise<Fetched<T>>
+
+  // A copy exists, so a slow or failing civicAPI never costs the reader an error.
+  waitUntil?.(request.catch(() => {}))
+  if (age < SWR_MS) return { data: hit.data as T, fetchedAt: hit.fetchedAt, stale: false }
+  const copy: Fetched<T> = { data: hit.data as T, fetchedAt: hit.fetchedAt, stale: true }
+  return Promise.race([
+    request as Promise<Fetched<T>>,
+    new Promise<Fetched<T>>((resolve) => setTimeout(() => resolve(copy), REFRESH_WAIT_MS)),
+  ])
 }
 
 export interface CivicCandidate {
