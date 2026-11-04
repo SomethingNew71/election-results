@@ -1,4 +1,5 @@
 import type { RaceKind } from '../types'
+import { rulesFor } from './rules'
 import { GOVERNOR_HOLDERS, HOUSE_HOLDERS, SENATE_HOLDERS } from './seatHolders'
 
 const LETTER_PARTY: Record<string, string> = {
@@ -8,9 +9,13 @@ const LETTER_PARTY: Record<string, string> = {
 }
 
 /** civicAPI's names for no party. */
-const INDEPENDENT = new Set(['Independent', 'Independent/Unenrolled', 'Unenrolled', 'No Party Affiliation', 'No Political Party'])
-/** These say nothing about a party, so no comparison can be made. */
-const UNKNOWN = new Set(['Nonpartisan', 'Unaffiliated', 'Other Party'])
+const INDEPENDENT = new Set(['Independent', 'Independent/Unenrolled', 'Unenrolled', 'No Party Affiliation', 'No Party Preference', 'No Political Party'])
+
+/** Deny by default: civicAPI's party labels are live values, and a variant must never read as a change of party. */
+function partyOf(label: string): string | null {
+  if (label === 'Democratic' || label === 'Republican') return label
+  return INDEPENDENT.has(label) ? 'Independent' : null
+}
 
 export interface Flip {
   from: string
@@ -22,7 +27,7 @@ export interface FlipRace {
   state: string
   district: string | null
   delegate?: boolean
-  candidates: { party: string; winner: boolean }[]
+  candidates: { party: string; votes: number; winner: boolean }[]
 }
 
 function holderLetter(race: FlipRace): string | undefined {
@@ -37,10 +42,15 @@ function holderLetter(race: FlipRace): string | undefined {
 /** The change of party when civicAPI has called a winner from another party; otherwise null. */
 export function flipOf(race: FlipRace): Flip | null {
   const winners = race.candidates.filter((c) => c.winner)
-  if (winners.length !== 1 || UNKNOWN.has(winners[0]!.party)) return null
+  if (winners.length !== 1) return null
+  const winner = winners[0]!
+  const to = partyOf(winner.party)
   const letter = holderLetter(race)
-  if (!letter) return null
+  if (!to || !letter) return null
+  // A flag below 50% in a runoff or RCV race is not the final result.
+  const rules = rulesFor(race.state, race.kind)
+  const total = race.candidates.reduce((sum, c) => sum + c.votes, 0)
+  if ((rules.majority || rules.rcv) && winner.votes * 2 <= total) return null
   const from = LETTER_PARTY[letter]!
-  const to = INDEPENDENT.has(winners[0]!.party) ? 'Independent' : winners[0]!.party
   return from === to ? null : { from, to }
 }

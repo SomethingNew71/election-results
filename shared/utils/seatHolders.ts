@@ -1,8 +1,8 @@
 /**
  * Party holding each seat on the 2026 ballot going into the election, for the flip
  * tag. From the incumbent tables on Wikipedia's 2026 Senate, gubernatorial and House
- * election pages, read 2026-11-04. A vacant seat counts as its last holder's party
- * (FL-20 D, TX-23 R). Totals match officeholders.ts: Senate 13 D / 22 R, governors
+ * election pages, read 2026-11-04. A vacant seat counts as its last holder's party.
+ * Totals match officeholders.ts: Senate 13 D / 22 R, governors
  * 18 D / 18 R.
  */
 export const SENATE_HOLDERS: Record<string, string> = {
