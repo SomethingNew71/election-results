@@ -264,7 +264,10 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
                   <NuxtLink :to="`/race/${race.id}`" class="font-semibold underline-offset-4 hover:underline">
                     {{ kind === 'house' ? race.district : race.name }}
                   </NuxtLink>
-                  <StatusTag :status="inf.status" :color="inf.leader?.color" />
+                  <span class="flex flex-wrap items-center justify-end gap-1">
+                    <FlipTag :race="race" />
+                    <StatusTag :status="inf.status" :color="inf.leader?.color" />
+                  </span>
                 </div>
                 <div class="kicker mt-1">{{ formatPct(race) }} reporting · {{ formatNumber(inf.counted) }} votes</div>
                 <CandidateRows class="mt-3" :candidates="race.candidates" :limit="3" compact />
@@ -286,6 +289,10 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
                 <div v-for="s in (['competitive', 'lean', 'strong', 'decided', 'close', 'runoff', 'rcv', 'called'] as const)" :key="s">
                   <dt><StatusTag :status="s" /></dt>
                   <dd class="text-muted mt-1">{{ STATUS_HELP[s] }}</dd>
+                </div>
+                <div>
+                  <dt><span class="kicker inline-flex items-center rounded-full border border-ink px-2 py-0.5 !text-ink">Flip</span></dt>
+                  <dd class="text-muted mt-1">civicAPI has called this race for a party other than the one that held the seat going in. Not compared for territories, nonpartisan winners, or House seats in states with a new 2026 map (AL, CA, FL, LA, NC, OH, TN, TX, UT).</dd>
                 </div>
               </dl>
             </details>
@@ -347,7 +354,12 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
                 <td class="num py-2 pr-3 text-right">
                   {{ inf.neededShare !== null && inf.neededShare <= 1 && inf.status !== 'called' ? formatShare(inf.neededShare, 0) : '–' }}
                 </td>
-                <td class="py-2"><StatusTag :status="inf.status" :color="inf.leader?.color" /></td>
+                <td class="py-2">
+                  <span class="flex flex-wrap items-center gap-1">
+                    <StatusTag :status="inf.status" :color="inf.leader?.color" />
+                    <FlipTag :race="race" />
+                  </span>
+                </td>
               </tr>
             </tbody>
           </table>

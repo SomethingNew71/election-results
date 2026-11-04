@@ -4,7 +4,8 @@ Live 2026 US election results on Cloudflare Workers (`election-results.classicmi
 
 ## Invariants
 
-- **Neutrality.** The app never calls a race. Only civicAPI's `winner` flag shows as "Called". Every other status is labelled as an estimate. No ratings, no "flip"/"hold" language.
+- **Neutrality.** The app never calls a race. Only civicAPI's `winner` flag shows as "Called". Every other status is labelled as an estimate. No ratings, no "hold" language. "Flip" appears only on a civicAPI-called winner (next rule).
+- **A flip is a called winner only.** `flipOf` (`shared/utils/flip.ts`) compares the winner's party with the party holding the seat going in (`shared/utils/seatHolders.ts`, a static table). No flag, no tag: never a leader, projection or estimate. Not shown for territories, a nonpartisan winner, or House seats in the nine states voting on a new map, where a district number can be a different seat.
 - **Party colours are ours, not civicAPI's.** civicAPI assigns colours per candidate (a second Republican can be yellow). `toCandidate` overwrites them with `partyColor()` from `shared/utils/parties.ts`. The seat bar keeps Democratic left and Republican right at all times.
 - **Status uses the statewide count only.** `inferRace` status ignores the county projection so the list and the race page always agree. The projection flip is shown as a separate note.
 - **Remaining vote is anchored statewide.** Regions only decide where the remainder sits; regional estimates are scaled down to the statewide remainder, and regions under 5% reporting are not extrapolated.
