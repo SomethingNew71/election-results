@@ -161,7 +161,6 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
 
 <template>
   <div>
-    <ModeSwitch />
     <nav class="flex gap-1 border-b border-rule" aria-label="Chamber">
       <button
         v-for="k in KINDS"
