@@ -102,7 +102,8 @@ export async function cachedGet<T>(
   if (!hit || age >= MAX_STALE_MS) return request as Promise<Fetched<T>>
 
   // A copy exists, so a slow or failing civicAPI never costs the reader an error.
-  waitUntil?.(request.catch(() => {}))
+  const background = request.catch(() => {})
+  waitUntil?.(background)
   if (age < SWR_MS) return { data: hit.data as T, fetchedAt: hit.fetchedAt, stale: false }
   const copy: Fetched<T> = { data: hit.data as T, fetchedAt: hit.fetchedAt, stale: true }
   return Promise.race([

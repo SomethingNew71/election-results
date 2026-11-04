@@ -184,7 +184,7 @@ useHead({ title: () => `${KINDS.find((k) => k.kind === kind.value)!.label} resul
     </nav>
 
     <div v-if="data?.stale" role="status" class="mt-4 rounded border border-ink bg-panel px-4 py-3 text-sm">
-      civicAPI is not responding. These results are from {{ formatAge(dataAge) }} and may be out of date.
+      civicAPI is slow or not responding. These results are from {{ formatAge(dataAge) }} and may be out of date.
     </div>
 
     <div v-if="error && !data" class="mt-8 rounded border border-rule bg-panel p-6">
