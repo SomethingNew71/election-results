@@ -134,7 +134,7 @@ useHead({ title: () => `civicAPI ${KINDS.find((k) => k.kind === kind.value)!.lab
     </div>
 
     <div v-if="data?.stale" role="status" class="mt-4 rounded border border-ink bg-panel px-4 py-3 text-sm">
-      civicAPI is not responding. This forecast is an older copy.
+      civicAPI is slow or not responding. This forecast is an older copy.
     </div>
     <div v-if="error && !data" class="mt-8 rounded border border-rule bg-panel p-6">
       <p class="font-semibold">The forecast is not available right now.</p>

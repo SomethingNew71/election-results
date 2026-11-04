@@ -34,10 +34,11 @@ const INSTANCE = 'server'
 const ALARM_MS = 15_000
 /**
  * A forward slower than this is abandoned and the isolate answers itself, with
- * no cached copy. It must cover civic.ts's REFRESH_WAIT_MS (2 s) plus the 1.5 s
- * vote-type wait on a race page, or a civicAPI failure reaches the reader as a 502.
+ * no cached copy. It must cover a race page's sequential waits: the race list and
+ * the race detail (civic.ts's REFRESH_WAIT_MS, 2 s each) plus vote types (1.5 s).
+ * Otherwise a civicAPI failure reaches the reader as a 502.
  */
-const FORWARD_TIMEOUT_MS = 4_000
+const FORWARD_TIMEOUT_MS = 6_000
 /** Keep refreshing for this long after the last request. */
 const WARM_FOR_MS = 5 * 60_000
 let lastRequestAt = 0
