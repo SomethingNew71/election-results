@@ -19,6 +19,8 @@ export interface RaceSummary {
   /** District label such as "TX-20"; null for statewide races. */
   district: string | null
   pct: number
+  /** civicAPI is stale and the counts are a state's: `pct` is 0 and shows as unknown. */
+  pctFrozen?: boolean
   candidates: Candidate[]
   /** Non-voting House delegate (DC and the territories): off the map and out of the seat count. */
   delegate?: boolean

@@ -18,7 +18,7 @@ export default defineEventHandler(async (event): Promise<Overview | Response | s
   setResponseHeader(event, 'content-type', 'application/json')
   const key = [tracked.fetchedAt, tracked.stale, ...[...new Set([...feeds.values()].map((f) => f.meta))].map((m) => `${m.version}@${m.checkedAt}`)].join('|')
   if (memo?.key === key) return memo.body
-  const races = applyFeeds(tracked.races, feeds)
+  const races = applyFeeds(tracked.races, feeds).map((r) => withoutFrozenPct(r, tracked.stale))
   const overview: Overview = { dataAsOf: new Date(tracked.fetchedAt).toISOString(), stale: tracked.stale, races, chambers: CHAMBERS }
   memo = { key, body: JSON.stringify(overview) }
   return memo.body

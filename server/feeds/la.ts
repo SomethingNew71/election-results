@@ -86,9 +86,7 @@ export const la: FeedAdapter = {
   async load() {
     const [raceList, votes] = await Promise.all([getJson<LaRaceList>(RACES_URL, this.source), getJson<LaVotes>(VOTES_URL, this.source)])
     const races = parseLa(raceList, votes)
-    const stamp = Date.parse(`${votes.Races?.VersionDateTime ?? ''}Z`)
-    return Number.isFinite(stamp)
-      ? { version: stamp, races }
-      : { version: countsFingerprint(races), unordered: true, races }
+    // Not VersionDateTime: the 2024 file has real votes under the stamp 1900-01-01, which would freeze the feed.
+    return { version: countsFingerprint(races), unordered: true, races }
   },
 }

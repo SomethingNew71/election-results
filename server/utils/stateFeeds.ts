@@ -197,6 +197,52 @@ const failedAt = new Map<string, number>()
 const attemptedAt = new Map<string, number>()
 const refreshing = new Map<string, Promise<void>>()
 
+const lowerSeen = new Map<string, Map<string, number>>()
+function lowerSeenFor(state: string): Map<string, number> {
+  let seen = lowerSeen.get(state)
+  if (!seen) lowerSeen.set(state, (seen = new Map()))
+  return seen
+}
+
+const raceTotal = (r: FeedRace) => r.candidates.reduce((n, c) => n + c.votes, 0)
+
+/**
+ * Applies a load race by race, so a partial load never costs a state's other
+ * races. A race the load omits keeps its copy, and a race never drops to 0.
+ * Feeds without a version stamp can return an older cached copy, so their lower
+ * count is applied only when two polls in a row agree. A stamped feed's lower
+ * count is a correction and applies at once.
+ */
+export function mergeFeedRaces(
+  prev: FeedRace[],
+  next: FeedRace[],
+  seen: Map<string, number>,
+  unordered: boolean,
+): { races: FeedRace[]; held: boolean } {
+  const byKey = new Map(next.map((r) => [feedKey(r), r]))
+  let held = false
+  const races = prev.map((old) => {
+    const key = feedKey(old)
+    const fresh = byKey.get(key)
+    byKey.delete(key)
+    if (!fresh) return old
+    const total = raceTotal(fresh)
+    if (total >= raceTotal(old)) {
+      seen.delete(key)
+      return fresh
+    }
+    if (total === 0) return old
+    if (!unordered || seen.get(key) === total) {
+      seen.delete(key)
+      return fresh
+    }
+    seen.set(key, total)
+    held = true
+    return old
+  })
+  return { races: [...races, ...byKey.values()], held }
+}
+
 function refreshFeed(f: FeedAdapter): Promise<void> {
   const now = Date.now()
   if (now - (failedAt.get(f.state) ?? 0) < FAILURE_BACKOFF_MS) return Promise.resolve()
@@ -217,9 +263,11 @@ function refreshFeed(f: FeedAdapter): Promise<void> {
       return
     }
     if (!loaded.races) return
+    const merged = prev ? mergeFeedRaces(prev.races, loaded.races, lowerSeenFor(f.state), Boolean(loaded.unordered)) : { races: loaded.races, held: false }
     latest.set(f.state, {
-      version: loaded.version,
-      races: loaded.races,
+      // While a lower count is held back, the old version makes the next poll look again.
+      version: merged.held ? prev!.version : loaded.version,
+      races: merged.races,
       meta: { source: f.source, sourceUrl: f.sourceUrl, fetchedAt: checkedAt, checkedAt, version: String(loaded.version) },
     })
   })()
@@ -242,7 +290,11 @@ export async function stateFeedRaces(waitUntil?: (p: Promise<unknown>) => void):
   const refresh = Promise.allSettled(ADAPTERS.map(refreshFeed))
   // A state that has never loaded (failing or blocked) must not make every request wait.
   if (waitUntil && ADAPTERS.every((f) => latest.has(f.state) || failedAt.has(f.state))) waitUntil(refresh)
-  else await Promise.race([refresh, new Promise((resolve) => setTimeout(resolve, BUDGET_MS))])
+  else {
+    // The refresh must outlive this response, or its fetches are cancelled and the state stays blocked.
+    waitUntil?.(refresh)
+    await Promise.race([refresh, new Promise((resolve) => setTimeout(resolve, BUDGET_MS))])
+  }
   const out: FeedMap = new Map()
   for (const { races, meta } of latest.values()) {
     for (const race of races) out.set(feedKey(race), { race, meta })
@@ -260,4 +312,13 @@ export function applyFeeds(races: RaceSummary[], feeds: FeedMap): RaceSummary[] 
     const hit = feeds.get(key)
     return hit && keyCount.get(key) === 1 ? mergeFeed(race, hit.race, hit.meta) : race
   })
+}
+
+/**
+ * While civicAPI's copy is stale, its reporting % is older than a state feed's
+ * counts, and old % with new counts gives wrong estimates (53% frozen, 4 M counted:
+ * "3.5 M left"). Such a race has no % until civicAPI answers, so nothing is estimated.
+ */
+export function withoutFrozenPct<T extends RaceSummary>(race: T, stale: boolean): T {
+  return stale && race.crossCheck?.used ? { ...race, pct: 0, pctFrozen: true } : race
 }

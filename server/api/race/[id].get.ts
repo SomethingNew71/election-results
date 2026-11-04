@@ -57,7 +57,7 @@ export default defineEventHandler(async (event): Promise<RaceDetail | Response> 
 
   setResponseHeader(event, 'cache-control', 'public, max-age=15')
   return {
-    ...merged!,
+    ...withoutFrozenPct(merged!, stale),
     pollsClose: d.polls_close,
     lastUpdated: d.last_updated,
     registeredVoters: d.registered_voters,

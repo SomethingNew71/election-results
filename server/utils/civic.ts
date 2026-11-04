@@ -235,12 +235,21 @@ for (const scope of ['General', 'Statewide'] as const) {
   remember(searchUrl(scope), { races: raceSeed[scope] }, Date.parse(raceSeed.capturedAt))
 }
 
+/** A 200 with an error body or a short list must not replace the copy that protects the page. */
+export async function parseRaceList(res: Response, seedLength: number): Promise<{ races: CivicRace[] }> {
+  const body = (await res.json()) as { races?: CivicRace[] }
+  if (!Array.isArray(body.races) || body.races.length < seedLength / 2) {
+    throw new Error(`civicAPI race list has ${Array.isArray(body.races) ? body.races.length : 'no'} races`)
+  }
+  return body as { races: CivicRace[] }
+}
+
 /** Senate, House and Governor races on today's ballot, from two search calls. */
 export async function trackedRaces(waitUntil?: WaitUntil): Promise<TrackedRaces> {
   const scopes = ['General', 'Statewide'] as const
   const results = await Promise.all(
     scopes.map((scope) =>
-      cachedGet<{ races: CivicRace[] }>(searchUrl(scope), 'civicAPI', undefined, undefined, waitUntil),
+      cachedGet<{ races: CivicRace[] }>(searchUrl(scope), 'civicAPI', (res) => parseRaceList(res, raceSeed[scope].length), undefined, waitUntil),
     ),
   )
   const races: RaceSummary[] = []
