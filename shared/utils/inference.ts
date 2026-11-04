@@ -224,7 +224,8 @@ export function formatNumber(n: number): string {
 }
 
 /** Reporting percentage as a whole number. */
-export function formatPct(race: { pct: number }): string {
+export function formatPct(race: { pct: number; pctFrozen?: boolean }): string {
+  if (race.pctFrozen) return '—'
   return `${Math.round(race.pct)}%`
 }
 

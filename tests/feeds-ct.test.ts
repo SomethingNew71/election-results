@@ -53,7 +53,7 @@ describe('Connecticut', () => {
   it('sums party lines by person and folds named write-ins into one row', () => {
     const races = parseConnecticut(LOOKUP, VOTES, { reporting: 12, total: 776 })
     expect(races.map((r) => `${r.kind}:${r.district}`)).toEqual(['governor:null', 'house:CT-02'])
-    expect(races[0]).toMatchObject({ state: 'CT', unitsReporting: 12, unitsTotal: 776, unitLabel: 'precincts' })
+    expect(races[0]).toMatchObject({ state: 'CT', unitsReporting: 12, unitsTotal: 776, unitLabel: 'precincts statewide' })
     expect(races[0]!.candidates).toEqual([
       { name: 'Ned Lamont', votes: 1200 },
       { name: 'Ryan Fazio', votes: 850 },

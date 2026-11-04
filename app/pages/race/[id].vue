@@ -98,7 +98,8 @@ useHead({ title: () => (data.value ? `${data.value.name} — Election Night` : '
       </header>
 
       <div v-if="data.stale" role="status" class="mt-4 rounded border border-ink bg-panel px-4 py-3 text-sm">
-        civicAPI is slow or not responding. These results are from {{ formatAge(dataAge) }} and may be out of date.
+        <template v-if="data.pctFrozen">civicAPI is slow or not responding. These counts are from the state's own results, so reporting % and estimates are not shown.</template>
+        <template v-else>civicAPI is slow or not responding. These results are from {{ formatAge(dataAge) }} and may be out of date.</template>
       </div>
       <div v-if="certified" role="status" class="mt-4 rounded border border-rule bg-panel px-4 py-3 text-sm">
         {{ stateName(data.state) }} certified its results on {{ formatDay(certified.date) }}.

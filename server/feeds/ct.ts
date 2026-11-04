@@ -67,7 +67,7 @@ export function parseConnecticut(lookup: ConnecticutLookup, votes: ConnecticutVo
         candidates: [...[...named].map(([name, v]) => ({ name, votes: v })), ...(sawWriteIn ? [{ name: 'Write-in', votes: writeIns }] : [])],
         unitsReporting: precincts.reporting,
         unitsTotal: precincts.total,
-        unitLabel: 'precincts',
+        unitLabel: 'precincts statewide',
       })
     }
   }
